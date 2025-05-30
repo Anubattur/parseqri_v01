@@ -1,0 +1,54 @@
+# Conversion Tool - Project Structure
+
+## Overview
+This is a comprehensive PDF processing and conversion system that extracts data from PDF files and converts it into various formats (CSV, Markdown, and plain text). The system uses a multi-agent architecture where each agent handles a specific part of the workflow.
+
+## Project Structure
+
+```
+conversion_tool/
+│
+├── main.py                       # Main entry point that orchestrates the workflow
+├── input_agent.py                # Handles scanning and validation of PDF files
+├── parser_agent.py               # Extracts text, tables, and forms from PDFs
+├── preprocessing_agent.py        # Cleans and structures the extracted data
+├── conversion_agent_csv.py       # Converts processed data to CSV format
+├── conversion_agent_md.py        # Converts processed data to Markdown format
+├── conversion_agent_txt.py       # Converts processed data to plain text format
+├── requirements.txt              # Python package dependencies
+├── project_documentation.txt     # Documentation for the project
+│
+├── pdfs/                         # Directory for storing input PDF files
+├── pdfs_2/                       # Additional directory for PDF storage (backup)
+├── csv_output/                   # Directory for CSV output files
+│
+├── all_pdfs_combined.txt         # Combined output of all PDFs in text format
+├── all_pdfs_combined.md          # Combined output of all PDFs in markdown format
+├── combined_parsed_data.json     # Raw data extracted from PDFs
+└── preprocessed_data.json        # Cleaned and structured data ready for conversion
+```
+
+## Component Functions
+
+1. **Input Agent**: Scans directories for PDFs, validates them, and returns metadata.
+
+2. **Parser Agent**: Uses OCR (Tesseract) to extract text, tables, and forms from PDFs.
+
+3. **Preprocessing Agent**: Cleans and structures the extracted data.
+
+4. **Conversion Agents**:
+   - **CSV**: Converts structured data to CSV format
+   - **Markdown**: Converts structured data to Markdown format
+   - **Text**: Converts structured data to plain text format
+
+## Workflow
+
+1. The system scans for PDFs in the designated folder
+2. Valid PDFs are parsed to extract text, tables, and forms
+3. The extracted data is preprocessed for consistency
+4. The preprocessed data is converted to different formats (CSV, MD, TXT)
+5. Output files are created in their respective directories
+
+## Dependencies
+
+The project relies on external tools like Tesseract OCR for text extraction and various Python libraries for processing and conversion tasks. See requirements.txt for a complete list of dependencies. 

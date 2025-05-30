@@ -1,0 +1,2 @@
+
+venv/ *.pyc pycache/ .env .log uploads/.csv

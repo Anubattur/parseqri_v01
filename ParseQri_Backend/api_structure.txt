@@ -1,0 +1,400 @@
+# ParseQri API Structure
+
+## Project Structure
+```
+parseqri_backend/
+├── app/                    # Main application package
+│   ├── auth/               # Authentication logic
+│   │   ├── __init__.py
+│   │   ├── models.py       # User model definitions
+│   │   ├── routes.py       # Authentication endpoints
+│   │   └── utils.py        # Auth utilities
+│   ├── core/               # Core utilities
+│   │   ├── config.py       # Configuration settings
+│   │   ├── database.py     # Database connection
+│   │   ├── security.py     # Security utilities
+│   │   └── exceptions.py   # Custom exceptions
+│   ├── db/                 # Database connection and schema management
+│   │   ├── __init__.py
+│   │   ├── connectors.py   # PostgreSQL connector
+│   │   ├── models.py       # DB config models
+│   │   ├── routes.py       # Database endpoints
+│   │   └── schema_manager.py # Schema management utilities
+│   ├── routes/             # API routes
+│   │   ├── __init__.py
+│   │   ├── api.py          # Main API router
+│   │   └── data.py         # Data processing endpoints
+│   ├── schemas/            # Pydantic models
+│   │   ├── __init__.py
+│   │   ├── auth.py         # Auth schemas
+│   │   ├── db.py           # Database schemas
+│   │   └── data.py         # Data schemas
+│   ├── uploads/            # Temporary upload directory
+│   ├── __init__.py
+│   └── main.py             # FastAPI application setup
+├── uploads/                # Temporary storage for uploads
+├── .env                    # Environment variables
+├── requirements.txt        # Python dependencies
+├── Dockerfile              # Docker configuration
+└── README.md               # Project documentation
+```
+
+## API Endpoints
+
+### Base URL
+```
+http://localhost:8000
+```
+
+### Authentication Endpoints
+
+#### 1. Register a new user
+- **URL**: `/auth/register`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "username": "testuser",
+    "email": "user@example.com",
+    "password": "securepassword"
+  }
+  ```
+- **Response**: 
+  ```json
+  {
+    "id": 1,
+    "username": "testuser",
+    "email": "user@example.com"
+  }
+  ```
+
+#### 2. User Login
+- **URL**: `/auth/login`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "username_or_email": "testuser",
+    "password": "securepassword"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "bearer"
+  }
+  ```
+
+#### 3. Get Current User
+- **URL**: `/auth/me`
+- **Method**: `GET`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Response**:
+  ```json
+  {
+    "id": 1,
+    "username": "testuser",
+    "email": "user@example.com"
+  }
+  ```
+
+### Database Management Endpoints
+
+#### 1. Create Database Configuration
+- **URL**: `/api/db/config`
+- **Method**: `POST`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Request Body**:
+  ```json
+  {
+    "host": "localhost",
+    "port": 5432,
+    "db_name": "mydatabase",
+    "db_user": "postgres",
+    "db_password": "yourpassword"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "id": 1,
+    "host": "localhost",
+    "port": 5432,
+    "db_name": "mydatabase",
+    "db_user": "postgres",
+    "created_at": "2023-10-26T12:34:56.789Z",
+    "user_id": 1
+  }
+  ```
+
+#### 2. List Database Configurations
+- **URL**: `/api/db/config`
+- **Method**: `GET`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Response**:
+  ```json
+  [
+    {
+      "id": 1,
+      "host": "localhost",
+      "port": 5432,
+      "db_name": "mydatabase",
+      "db_user": "postgres",
+      "created_at": "2023-10-26T12:34:56.789Z",
+      "user_id": 1
+    }
+  ]
+  ```
+
+#### 3. Get Database Tables
+- **URL**: `/api/db/{db_config_id}/tables`
+- **Method**: `GET`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Response**:
+  ```json
+  [
+    "table1",
+    "table2",
+    "table3"
+  ]
+  ```
+
+#### 4. Get Table Metadata
+- **URL**: `/api/db/{db_config_id}/tables/{table_name}/metadata`
+- **Method**: `GET`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Response**:
+  ```json
+  {
+    "table_name": "your_table_name",
+    "columns": [
+      {
+        "name": "id",
+        "data_type": "integer",
+        "is_nullable": false,
+        "is_primary_key": true
+      },
+      {
+        "name": "name",
+        "data_type": "varchar",
+        "is_nullable": true,
+        "is_primary_key": false
+      }
+    ]
+  }
+  ```
+
+### Data Management Endpoints
+
+#### 1. Upload CSV File
+- **URL**: `/api/upload/csv`
+- **Method**: `POST`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Form Data**:
+  - `file`: CSV file
+  - `table_name`: Name of the table to create
+  - `db_config_id`: Database configuration ID
+  - `create_if_not_exists`: Boolean (true/false)
+- **Response**:
+  ```json
+  {
+    "message": "File uploaded and being processed",
+    "table_name": "your_table_name",
+    "db_config_id": 1,
+    "rows_count": 1000
+  }
+  ```
+
+#### 2. Query Data
+- **URL**: `/api/db/{db_config_id}/query`
+- **Method**: `POST`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Request Body**:
+  ```json
+  {
+    "query": "SELECT * FROM your_table_name LIMIT 10"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "result": [
+      {
+        "id": 1,
+        "name": "Example",
+        "value": 100
+      },
+      {
+        "id": 2,
+        "name": "Test",
+        "value": 200
+      }
+    ],
+    "column_names": ["id", "name", "value"]
+  }
+  ```
+
+## Integration with AI Models
+
+### AI Processing Endpoint
+
+#### 1. Process Data with AI
+- **URL**: `/api/ai/process`
+- **Method**: `POST`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Request Body**:
+  ```json
+  {
+    "db_config_id": 1,
+    "table_name": "your_table_name",
+    "model_type": "analysis", 
+    "parameters": {
+      "task": "classification",
+      "target_column": "target",
+      "features": ["feature1", "feature2"]
+    }
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "job_id": "12345",
+    "status": "processing",
+    "estimated_time": "30s"
+  }
+  ```
+
+#### 2. Get AI Processing Results
+- **URL**: `/api/ai/results/{job_id}`
+- **Method**: `GET`
+- **Headers**: `Authorization: Bearer YOUR_TOKEN`
+- **Response**:
+  ```json
+  {
+    "job_id": "12345",
+    "status": "completed",
+    "results": {
+      "model_performance": {
+        "accuracy": 0.95,
+        "precision": 0.94,
+        "recall": 0.93
+      },
+      "model_details": {
+        "type": "classification",
+        "important_features": ["feature1", "feature2"]
+      }
+    }
+  }
+  ```
+
+## Frontend Integration
+
+To integrate with a frontend application:
+
+1. Install an HTTP client (e.g., Axios) in your frontend project
+2. Create an authentication service that handles:
+   - User registration
+   - Login
+   - Token storage
+   - Token refresh
+   
+3. Create API services for each resource:
+   - Database configuration management
+   - Data upload and querying
+   - AI model integration
+   
+4. Implement proper error handling for API responses
+5. Use secure storage for authentication tokens
+6. Implement UI components for:
+   - User authentication
+   - Database connection management
+   - Data upload and visualization
+   - AI model configuration and results display
+
+## Example Frontend API Service (JavaScript/TypeScript)
+
+```javascript
+// api.js - Example API client with axios
+import axios from 'axios';
+
+const API_URL = 'http://localhost:8000';
+
+// Create axios instance with auth header
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
+// Add auth token to requests
+apiClient.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Auth services
+export const authService = {
+  register: (username, email, password) => 
+    apiClient.post('/auth/register', { username, email, password }),
+  
+  login: (username_or_email, password) => 
+    apiClient.post('/auth/login', { username_or_email, password }),
+  
+  getCurrentUser: () => 
+    apiClient.get('/auth/me')
+};
+
+// Database services
+export const dbService = {
+  createConfig: (config) => 
+    apiClient.post('/api/db/config', config),
+  
+  getConfigs: () => 
+    apiClient.get('/api/db/config'),
+  
+  getTables: (dbConfigId) => 
+    apiClient.get(`/api/db/${dbConfigId}/tables`),
+  
+  getTableMetadata: (dbConfigId, tableName) => 
+    apiClient.get(`/api/db/${dbConfigId}/tables/${tableName}/metadata`),
+  
+  queryData: (dbConfigId, query) => 
+    apiClient.post(`/api/db/${dbConfigId}/query`, { query })
+};
+
+// Data upload service
+export const dataService = {
+  uploadCSV: (file, tableName, dbConfigId, createIfNotExists) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('table_name', tableName);
+    formData.append('db_config_id', dbConfigId);
+    formData.append('create_if_not_exists', createIfNotExists);
+    
+    return apiClient.post('/api/upload/csv', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  }
+};
+
+// AI model service
+export const aiService = {
+  processData: (dbConfigId, tableName, modelType, parameters) => 
+    apiClient.post('/api/ai/process', {
+      db_config_id: dbConfigId,
+      table_name: tableName,
+      model_type: modelType,
+      parameters
+    }),
+  
+  getResults: (jobId) => 
+    apiClient.get(`/api/ai/results/${jobId}`)
+};
+``` 

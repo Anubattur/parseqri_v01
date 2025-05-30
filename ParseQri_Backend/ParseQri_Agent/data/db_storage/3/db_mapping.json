@@ -1,0 +1,17 @@
+{
+  "loan_3": {
+    "db_id": 3,
+    "file_path": "D:\\Projects\\AI_Projects\\ParseQri\\parseqri_backend\\ParseQri_Agent\\data\\input\\loan_3.csv",
+    "upload_time": "2025-05-28T12:30:42.638585"
+  },
+  "ch_3": {
+    "db_id": 3,
+    "file_path": "D:\\Projects\\AI_Projects\\ParseQri\\parseqri_backend\\ParseQri_Agent\\data\\input\\Ch_Ship_Dart_Report_RA_Signal_3.csv",
+    "upload_time": "2025-05-29T11:36:39.269993"
+  },
+  "customers_3": {
+    "db_id": 3,
+    "file_path": "D:\\Projects\\AI_Projects\\ParseQri\\parseqri_backend\\ParseQri_Agent\\data\\input\\customers_3.csv",
+    "upload_time": "2025-05-29T11:37:31.563855"
+  }
+}

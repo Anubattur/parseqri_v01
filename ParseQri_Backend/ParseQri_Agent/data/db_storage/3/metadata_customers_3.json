@@ -1,0 +1,22 @@
+{
+  "user_id": "3",
+  "table_name": "customer_info",
+  "csv_file": "D:\\Projects\\AI_Projects\\ParseQri\\parseqri_backend\\ParseQri_Agent\\data\\input\\customers_3.csv",
+  "document_id": "customer_info_3",
+  "metadata": {
+    "table_name": "customer_info",
+    "columns": {
+      "customerID": "Unique customer identifier",
+      "companyName": "Company name associated with the customer",
+      "contactName": "Person in contact with the company",
+      "contactTitle": "Job title of person in contact",
+      "address": "Street address of company or customer",
+      "city": "City where company or customer is located",
+      "region": "Geographic region of company or customer",
+      "postalCode": "Postal code associated with company or customer",
+      "country": "Country where company or customer is located",
+      "phone": "Phone number of company or customer",
+      "fax": "Fax number of company or customer"
+    }
+  }
+}
