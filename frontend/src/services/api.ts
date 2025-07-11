@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:8000';
 
+// Check if we're in development mode
+const isDevelopment = window.location.hostname === 'localhost';
+
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
@@ -72,6 +75,12 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Mock authentication for development when server is down
+const useMockAuth = (error) => {
+  console.warn('Backend server unreachable, using mock authentication:', error);
+  return isDevelopment;
+};
+
 // Authentication services
 export const authService = {
   register: async (username: string, email: string, password: string) => {
@@ -83,6 +92,17 @@ export const authService = {
       });
       return response.data;
     } catch (error: any) {
+      // If server is down and we're in development, use mock auth
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock registration service');
+        return {
+          id: 'mock-user-id',
+          username,
+          email,
+          message: 'Mock registration successful'
+        };
+      }
+      
       if (error.response?.data?.detail) {
         throw new Error(error.response.data.detail);
       }
@@ -114,6 +134,27 @@ export const authService = {
         throw new Error('Invalid response from server');
       }
     } catch (error: any) {
+      // If server is down and we're in development, use mock auth
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock login service');
+        const mockToken = 'mock-jwt-token-' + Math.random().toString(36).substring(2);
+        const mockRefreshToken = 'mock-refresh-token-' + Math.random().toString(36).substring(2);
+        
+        // Store mock tokens
+        localStorage.setItem('token', mockToken);
+        localStorage.setItem('refresh_token', mockRefreshToken);
+        localStorage.setItem('isMockAuth', 'true');
+        
+        return {
+          access: mockToken,
+          refresh: mockRefreshToken,
+          user: {
+            id: 'mock-user-id',
+            username: username_or_email
+          }
+        };
+      }
+      
       if (error.response?.data?.detail) {
         throw new Error(error.response.data.detail);
       }
@@ -123,9 +164,27 @@ export const authService = {
 
   getCurrentUser: async () => {
     try {
+      // Check if using mock auth
+      if (localStorage.getItem('isMockAuth') === 'true') {
+        return {
+          id: 'mock-user-id',
+          username: localStorage.getItem('username') || 'mock_user',
+          email: 'mock@example.com'
+        };
+      }
+      
       const response = await apiClient.get('/auth/me');
       return response.data;
     } catch (error: any) {
+      // If server is down and we're in development, use mock auth
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        return {
+          id: 'mock-user-id',
+          username: localStorage.getItem('username') || 'mock_user',
+          email: 'mock@example.com'
+        };
+      }
+      
       if (error.response?.status === 401) {
         // Token is invalid or expired
         localStorage.removeItem('token');
@@ -139,6 +198,11 @@ export const authService = {
   checkAuth: async () => {
     try {
       const token = localStorage.getItem('token');
+      
+      // Check if using mock auth
+      if (localStorage.getItem('isMockAuth') === 'true') {
+        return { isAuthenticated: true };
+      }
       
       // Check if it's the admin bypass token
       if (token === 'admin-bypass-token') {
@@ -156,6 +220,11 @@ export const authService = {
       });
       return { isAuthenticated: true };
     } catch (error) {
+      // If server is down and we're in development, use mock auth
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        return { isAuthenticated: !!localStorage.getItem('token') };
+      }
+      
       return { isAuthenticated: false, error };
     }
   },
@@ -164,6 +233,7 @@ export const authService = {
     localStorage.removeItem('token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('username');
+    localStorage.removeItem('isMockAuth');
     
     // Redirect to landing page
     window.location.href = '/';
@@ -228,30 +298,121 @@ export const visualizerService = {
 // Dataset services
 export const datasetService = {
   getDatasets: async () => {
-    const response = await apiClient.get('/datasets/');
-    return response.data;
+    try {
+      const response = await apiClient.get('/datasets/');
+      return response.data;
+    } catch (error: any) {
+      // If server is down and we're in development, use mock data
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock datasets');
+        return [
+          {
+            id: 1,
+            name: 'Sample Dataset 1',
+            type: 'CSV',
+            created_at: new Date().toISOString(),
+            size: 1024,
+            tables: 1,
+            status: 'active'
+          },
+          {
+            id: 2,
+            name: 'Sample Dataset 2',
+            type: 'CSV',
+            created_at: new Date(Date.now() - 86400000).toISOString(),
+            size: 2048,
+            tables: 1,
+            status: 'active'
+          }
+        ];
+      }
+      throw error;
+    }
   },
   uploadDataset: async (formData: FormData) => {
-    const response = await apiClient.post('/datasets/upload/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
+    try {
+      const response = await apiClient.post('/datasets/upload/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error: any) {
+      // If server is down and we're in development, use mock data
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock dataset upload');
+        const fileName = formData.get('file') instanceof File ? (formData.get('file') as File).name : 'unknown.csv';
+        return {
+          id: Math.floor(Math.random() * 1000) + 3,
+          name: fileName,
+          type: 'CSV',
+          created_at: new Date().toISOString(),
+          size: Math.floor(Math.random() * 10000),
+          tables: 1,
+          status: 'active'
+        };
+      }
+      throw error;
+    }
   },
   uploadCsv: async (file: File, dbId: number) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await apiClient.post(`/data/upload/${dbId}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await apiClient.post(`/data/upload/${dbId}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error: any) {
+      // If server is down and we're in development, use mock data
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock CSV upload');
+        return {
+          id: dbId || Math.floor(Math.random() * 1000) + 3,
+          name: file.name,
+          type: 'CSV',
+          created_at: new Date().toISOString(),
+          size: file.size,
+          status: 'active'
+        };
+      }
+      throw error;
+    }
   },
   getDatasetDetails: async (datasetId: number) => {
     const response = await apiClient.get(`/datasets/${datasetId}/`);
+    return response.data;
+  },
+  getDatasetData: async (datasetId: number, limit?: number, offset?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    if (offset) params.append('offset', offset.toString());
+    
+    const response = await apiClient.get(`/datasets/${datasetId}/data?${params.toString()}`);
+    return response.data;
+  },
+  getUserDatasets: async () => {
+    const response = await apiClient.get('/user/datasets/');
+    return response.data;
+  },
+  // Alternative endpoints to try
+  getMyDatasets: async () => {
+    const response = await apiClient.get('/datasets/mine/');
+    return response.data;
+  },
+  getDatasets_v2: async () => {
+    const response = await apiClient.get('/api/datasets/');
+    return response.data;
+  },
+  getDatasetSchema: async (datasetId: number) => {
+    const response = await apiClient.get(`/datasets/${datasetId}/schema`);
+    return response.data;
+  },
+  getDatabaseTables: async (databaseId: number) => {
+    const response = await apiClient.get(`/db/${databaseId}/tables`);
     return response.data;
   },
 };
@@ -286,7 +447,7 @@ export const apiDiagnostic = {
     const token = localStorage.getItem('token');
     const refreshToken = localStorage.getItem('refresh_token');
     return {
-      hasToken: !!token,
+      hasToken: !!token,  
       hasRefreshToken: !!refreshToken,
       tokenInfo: token ? {
         length: token.length,
@@ -300,8 +461,27 @@ export const apiDiagnostic = {
 // Database configuration services
 export const dbService = {
   getConfigs: async () => {
-    const response = await apiClient.get('/db/config');
-    return response.data;
+    try {
+      const response = await apiClient.get('/db/config');
+      return response.data;
+    } catch (error: any) {
+      // If server is down and we're in development, use mock data
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock database configs');
+        return [
+          {
+            id: 1,
+            db_type: 'mysql',
+            host: 'localhost',
+            port: 3306,
+            db_name: 'mock_database',
+            db_user: 'mock_user',
+            created_at: new Date().toISOString()
+          }
+        ];
+      }
+      throw error;
+    }
   },
   createConfig: async (config: {
     db_type: string;
@@ -311,12 +491,44 @@ export const dbService = {
     db_user: string;
     db_password: string;
   }) => {
-    const response = await apiClient.post('/db/config', config);
-    return response.data;
+    try {
+      const response = await apiClient.post('/db/config', config);
+      return response.data;
+    } catch (error: any) {
+      // If server is down and we're in development, use mock data
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock database config creation');
+        return {
+          id: 1,
+          ...config,
+          db_password: '******', // Don't return actual password
+          created_at: new Date().toISOString()
+        };
+      }
+      throw error;
+    }
   },
   createDefaultConfig: async () => {
-    const response = await apiClient.post('/db/default-config');
-    return response.data;
+    try {
+      const response = await apiClient.post('/db/default-config');
+      return response.data;
+    } catch (error: any) {
+      // If server is down and we're in development, use mock data
+      if (error.message === 'Network Error' && useMockAuth(error)) {
+        console.log('Using mock default database config');
+        return {
+          id: 1,
+          db_type: 'mysql',
+          host: 'localhost',
+          port: 3306,
+          db_name: 'default_db',
+          db_user: 'default_user',
+          db_password: '******', // Don't return actual password
+          created_at: new Date().toISOString()
+        };
+      }
+      throw error;
+    }
   }
 };
 
@@ -369,6 +581,52 @@ export const textToSqlService = {
       }
       throw error;
     }
+  }
+};
+
+// Add endpoint discovery utility
+export const endpointDiscovery = {
+  checkEndpoint: async (endpoint: string) => {
+    try {
+      const response = await apiClient.get(endpoint);
+      return { exists: true, status: response.status, data: response.data };
+    } catch (error: any) {
+      return { 
+        exists: false, 
+        status: error.response?.status || 0, 
+        error: error.response?.data || error.message 
+      };
+    }
+  },
+  
+  discoverDatasetEndpoints: async () => {
+    const possibleEndpoints = [
+      '/datasets/',
+      '/api/datasets/',
+      '/user/datasets/',
+      '/datasets/mine/',
+      '/data/datasets/',
+      '/api/data/datasets/',
+      '/user/data/',
+      '/data/',
+      '/tables/'
+    ];
+    
+    const results = {};
+    
+    for (const endpoint of possibleEndpoints) {
+      console.log(`Testing endpoint: ${endpoint}`);
+      const result = await endpointDiscovery.checkEndpoint(endpoint);
+      results[endpoint] = result;
+      
+      if (result.exists) {
+        console.log(`✅ Found working endpoint: ${endpoint}`, result);
+      } else {
+        console.log(`❌ Endpoint not available: ${endpoint} (${result.status})`);
+      }
+    }
+    
+    return results;
   }
 };
 

@@ -7,28 +7,55 @@ import argparse
 import time
 import psutil
 
-def clear_postgres_tables(user_id=None, db_url="postgresql://postgres:password@localhost:5432/parseqri", schema="public"):
+def clear_mysql_tables(user_id=None, db_url="mysql+pymysql://root:root@localhost:3306/parseqri", schema="parseqri"):
     """
-    Clear PostgreSQL tables for a specific user or all users.
+    Clear MySQL tables for a specific user or all users.
+    For users and user_databases tables, only delete data, don't drop the tables.
     
     Args:
         user_id: Optional user ID to limit deletion to a specific user's tables
-        db_url: PostgreSQL connection URL
+        db_url: MySQL connection URL
         schema: Database schema name
     """
-    # Define system tables that should be protected
-    protected_tables = ["users", "user_databases", "system_config", "migrations"]
+    # Define system tables that should have data cleared but not be dropped
+    data_clear_tables = ["users", "user_databases"]
+    # Define other system tables that should be completely protected
+    protected_tables = ["system_config", "migrations"]
     
     try:
         # Create SQLAlchemy engine
         engine = create_engine(db_url)
-        print(f"PostgreSQL connection established successfully")
+        print(f"MySQL connection established successfully")
         
         with engine.connect() as conn:
             inspector = inspect(engine)
             all_tables = inspector.get_table_names(schema=schema)
             
-            # Filter tables based on user_id and protected tables
+            # Clear data from users and user_databases tables
+            if user_id:
+                # Clear data for specific user
+                for table in data_clear_tables:
+                    if table in all_tables:
+                        try:
+                            if table == "users":
+                                conn.execute(text(f'DELETE FROM `{table}` WHERE id = :user_id'), {"user_id": user_id})
+                                print(f"Cleared data from {table} for user {user_id}")
+                            elif table == "user_databases":
+                                conn.execute(text(f'DELETE FROM `{table}` WHERE user_id = :user_id'), {"user_id": user_id})
+                                print(f"Cleared data from {table} for user {user_id}")
+                        except Exception as e:
+                            print(f"Error clearing data from table {table}: {e}")
+            else:
+                # Clear all data from these tables
+                for table in data_clear_tables:
+                    if table in all_tables:
+                        try:
+                            conn.execute(text(f'DELETE FROM `{table}`'))
+                            print(f"Cleared all data from table: {table}")
+                        except Exception as e:
+                            print(f"Error clearing data from table {table}: {e}")
+            
+            # Filter tables to drop based on user_id and protected tables
             if user_id:
                 # Only drop tables with specific user prefix
                 tables_to_drop = [table for table in all_tables if table.startswith(f"{user_id}_")]
@@ -37,8 +64,8 @@ def clear_postgres_tables(user_id=None, db_url="postgresql://postgres:password@l
                 # Drop all user tables but protect system tables
                 tables_to_drop = []
                 for table in all_tables:
-                    # Skip protected tables
-                    if table in protected_tables:
+                    # Skip protected tables and data-clear tables
+                    if table in protected_tables or table in data_clear_tables:
                         print(f"Skipping protected table: {table}")
                         continue
                         
@@ -46,7 +73,7 @@ def clear_postgres_tables(user_id=None, db_url="postgresql://postgres:password@l
                     parts = table.split('_', 1)
                     if len(parts) > 1 and parts[0].isdigit():
                         tables_to_drop.append(table)
-                    elif table != "users" and table != "user_databases":
+                    else:
                         # Also include other tables that don't match the pattern
                         # but aren't system tables
                         tables_to_drop.append(table)
@@ -56,7 +83,7 @@ def clear_postgres_tables(user_id=None, db_url="postgresql://postgres:password@l
             # Drop each table
             for table in tables_to_drop:
                 try:
-                    conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+                    conn.execute(text(f'DROP TABLE IF EXISTS `{table}`'))
                     print(f"Dropped table: {table}")
                 except Exception as e:
                     print(f"Error dropping table {table}: {e}")
@@ -66,7 +93,7 @@ def clear_postgres_tables(user_id=None, db_url="postgresql://postgres:password@l
             
         return True
     except Exception as e:
-        print(f"Error clearing PostgreSQL tables: {e}")
+        print(f"Error clearing MySQL tables: {e}")
         return False
 
 def clear_chromadb_data(user_id=None, db_storage_dir="../data/db_storage", max_retries=3, retry_delay=1):
@@ -167,17 +194,17 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Clear ParseQri database data")
     parser.add_argument('--user', '-u', type=str, help='User ID to clear data for (omit to clear all users)')
-    parser.add_argument('--postgres-only', action='store_true', help='Clear only PostgreSQL data')
+    parser.add_argument('--mysql-only', action='store_true', help='Clear only MySQL data')
     parser.add_argument('--chromadb-only', action='store_true', help='Clear only ChromaDB data')
-    parser.add_argument('--db-url', type=str, default="postgresql://postgres:password@localhost:5432/parseqri", 
-                      help='PostgreSQL database URL')
+    parser.add_argument('--db-url', type=str, default="mysql+pymysql://root:root@localhost:3306/parseqri", 
+                      help='MySQL database URL')
     parser.add_argument('--force', '-f', action='store_true', help='Skip confirmation prompt')
     
     args = parser.parse_args()
     
     # Determine which databases to clear
-    clear_postgres = not args.chromadb_only
-    clear_chroma = not args.postgres_only
+    clear_mysql = not args.chromadb_only
+    clear_chroma = not args.mysql_only
     
     # Show summary of operations
     if args.user:
@@ -185,7 +212,7 @@ def main():
     else:
         print("Clearing database data for ALL users")
     
-    print(f"Operations: PostgreSQL={clear_postgres}, ChromaDB={clear_chroma}")
+    print(f"Operations: MySQL={clear_mysql}, ChromaDB={clear_chroma}")
     
     # Confirmation prompt
     if not args.force:
@@ -194,14 +221,14 @@ def main():
             print("Operation cancelled.")
             return
     
-    # Clear PostgreSQL tables
-    if clear_postgres:
-        print("\n--- Clearing PostgreSQL tables ---")
-        success = clear_postgres_tables(args.user, args.db_url)
+    # Clear MySQL tables
+    if clear_mysql:
+        print("\n--- Clearing MySQL tables ---")
+        success = clear_mysql_tables(args.user, args.db_url)
         if success:
-            print("PostgreSQL tables cleared successfully.")
+            print("MySQL tables cleared successfully.")
         else:
-            print("Failed to clear PostgreSQL tables.")
+            print("Failed to clear MySQL tables.")
     
     # Clear ChromaDB data
     if clear_chroma:

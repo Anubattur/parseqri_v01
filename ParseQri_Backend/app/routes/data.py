@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_token
 from app.db.models import UserDatabase
-from app.db.connectors import DatabaseConnector
+from app.db.connectors import DatabaseConnectorFactory
 from app.db.schema_manager import SchemaManager
 from app.schemas.db import DBConfigOut
 from app.schemas.data import SchemaMetadata, ColumnMetadata
@@ -19,6 +19,102 @@ import json
 import re
 
 router = APIRouter(prefix="/data", tags=["data"])
+
+# Add dataset listing endpoints that the frontend expects
+@router.get("/datasets/")
+async def get_datasets(
+    token: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get all datasets/tables for the current user"""
+    try:
+        user_id = token.get("user_id")
+        
+        # Get all database configs for the user
+        db_configs = db.query(UserDatabase).filter(UserDatabase.user_id == user_id).all()
+        
+        datasets = []
+        for db_config in db_configs:
+            try:
+                # Create config object
+                config_dict = {
+                    "id": db_config.id,
+                    "user_id": db_config.user_id,
+                    "db_type": db_config.db_type,
+                    "host": db_config.host,
+                    "port": db_config.port,
+                    "db_name": db_config.db_name,
+                    "db_user": db_config.db_user,
+                    "db_password": db_config.db_password
+                }
+                
+                # Connect to database and get tables
+                connector = DatabaseConnectorFactory.create_connector(DBConfigOut(**config_dict))
+                schema_manager = SchemaManager(connector)
+                
+                # Get all tables for this database
+                tables = schema_manager.get_all_tables()
+                
+                for table_name in tables:
+                    datasets.append({
+                        "id": f"{db_config.id}_{table_name}",
+                        "name": table_name,
+                        "database_id": db_config.id,
+                        "database_name": db_config.db_name,
+                        "type": "table",
+                        "created_at": None,  # Could be enhanced to get actual creation time
+                        "size": None,  # Could be enhanced to get table size
+                        "tables": 1,
+                        "status": "active"
+                    })
+                    
+            except Exception as e:
+                print(f"Error getting tables for database {db_config.id}: {str(e)}")
+                continue
+        
+        return datasets
+        
+    except Exception as e:
+        print(f"Error in get_datasets: {str(e)}")
+        return []
+
+# Create the router without prefix for global endpoints
+global_router = APIRouter(tags=["datasets"])
+
+@global_router.get("/datasets/")
+async def get_datasets_global(
+    token: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """Global endpoint for getting datasets"""
+    return await get_datasets(token, db)
+
+@global_router.get("/user/datasets/")
+async def get_user_datasets(
+    token: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get user-specific datasets"""
+    return await get_datasets(token, db)
+
+@global_router.get("/datasets/mine/")
+async def get_my_datasets(
+    token: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """Get current user's datasets"""
+    return await get_datasets(token, db)
+
+# API router for /api/datasets/
+api_router = APIRouter(prefix="/api", tags=["api"])
+
+@api_router.get("/datasets/")
+async def get_datasets_api(
+    token: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """API endpoint for getting datasets"""
+    return await get_datasets(token, db)
 
 def cleanup_temp_file(file_path: str):
     """Delete temporary file after processing."""
@@ -166,7 +262,7 @@ async def upload_csv(
             }
             
             # Connect to database
-            connector = DatabaseConnector(DBConfigOut(**db_config_dict))
+            connector = DatabaseConnectorFactory.create_connector(DBConfigOut(**db_config_dict))
             schema_manager = SchemaManager(connector)
             
             # Process CSV and create table
@@ -294,7 +390,7 @@ def get_schema(
             "db_password": db_config.db_password
         }
         
-        connector = DatabaseConnector(DBConfigOut(**db_config_dict))
+        connector = DatabaseConnectorFactory.create_connector(DBConfigOut(**db_config_dict))
         schema_manager = SchemaManager(connector)
         return schema_manager.get_schema_metadata(table_name)
     except Exception as e:
@@ -302,3 +398,6 @@ def get_schema(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve schema: {str(e)}"
         )
+
+# Export all routers
+__all__ = ['router', 'global_router', 'api_router']

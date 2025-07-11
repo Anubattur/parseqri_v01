@@ -13,7 +13,7 @@ Usage:
 The script performs the following steps:
 1. Upload sample data for two different users
 2. Extract metadata using LLM and store in ChromaDB 
-3. Create PostgreSQL tables with user_id columns
+    3. Create MySQL tables with user_id columns
 4. Query each user's data separately
 """
 
@@ -109,10 +109,10 @@ def run_demo():
     print("\nStep 4: Listing available tables for each user")
     
     # Get tables for user1
-    if 'postgres_handler' in orchestrator.agents:
-        postgres_handler = orchestrator.agents['postgres_handler']
-        user1_tables = postgres_handler.list_user_tables(user1_id)
-        user2_tables = postgres_handler.list_user_tables(user2_id)
+    if 'mysql_handler' in orchestrator.agents:
+        mysql_handler = orchestrator.agents['mysql_handler']
+        user1_tables = mysql_handler.list_user_tables(user1_id)
+        user2_tables = mysql_handler.list_user_tables(user2_id)
         
         print(f"\nUser1 tables: {', '.join(user1_tables)}")
         print(f"User2 tables: {', '.join(user2_tables)}")
@@ -124,7 +124,7 @@ def run_demo():
     print(f"  Query: {user1_query}")
     user1_result = orchestrator.process_query(
         user_question=user1_query,
-        db_name="",  # Not used with PostgreSQL
+        db_name="",  # Not used with MySQL
         table_name="",  # Will be determined from metadata
         user_id=user1_id
     )
@@ -142,7 +142,7 @@ def run_demo():
     print(f"  Query: {user2_query}")
     user2_result = orchestrator.process_query(
         user_question=user2_query,
-        db_name="",  # Not used with PostgreSQL
+        db_name="",  # Not used with MySQL
         table_name="",  # Will be determined from metadata
         user_id=user2_id
     )

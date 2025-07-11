@@ -9,25 +9,25 @@ import re
 class QueryExecutionAgent:
     """
     Agent responsible for executing SQL queries against databases.
-    Handles both SQLite and PostgreSQL connections with user context awareness.
+    Handles both SQLite and MySQL connections with user context awareness.
     """
     
-    def __init__(self, postgres_url="postgresql://postgres:password@localhost:5432/parseqri"):
+    def __init__(self, mysql_url="mysql+pymysql://root:root@localhost:3306/parseqri"):
         """
         Initialize the Query Execution Agent.
         
         Args:
-            postgres_url: PostgreSQL connection URL
+            mysql_url: MySQL connection URL
         """
-        self.postgres_url = postgres_url
+        self.mysql_url = mysql_url
         
         # Create SQLAlchemy engine
         try:
-            self.engine = create_engine(self.postgres_url)
-            print(f"PostgreSQL connection established successfully for query execution")
+            self.engine = create_engine(self.mysql_url)
+            print(f"MySQL connection established successfully for query execution")
         except Exception as e:
             self.engine = None
-            print(f"Error connecting to PostgreSQL: {e}")
+            print(f"Error connecting to MySQL: {e}")
         
     def process(self, context: QueryContext) -> AgentResponse:
         """Process an SQL query execution request"""
@@ -61,20 +61,20 @@ class QueryExecutionAgent:
             sql_query = context.sql_query
             
             # Execute the query without additional filtering
-            # First, try to execute with PostgreSQL if we have a properly configured engine
+            # First, try to execute with MySQL if we have a properly configured engine
             if self.engine:
-                # Execute with PostgreSQL
+                # Execute with MySQL
                 results = self.execute_postgres_query(sql_query)
                 if results is not None:
                     # Query executed successfully
                     print(f"Successfully executed query for user {context.user_id}")
                 else:
-                    # Fallback to SQLite if PostgreSQL fails and a DB name is provided
+                    # Fallback to SQLite if MySQL fails and a DB name is provided
                     if context.db_name and context.db_name.endswith('.db'):
-                        print(f"PostgreSQL execution failed, falling back to SQLite for user {context.user_id}")
+                        print(f"MySQL execution failed, falling back to SQLite for user {context.user_id}")
                         results = self.execute_sqlite_query(sql_query, context.db_name)
             elif context.db_name and context.db_name.endswith('.db'):
-                # No PostgreSQL engine or user_id, use SQLite (for backward compatibility)
+                # No MySQL engine or user_id, use SQLite (for backward compatibility)
                 print(f"Using SQLite for user {context.user_id} with database {context.db_name}")
                 results = self.execute_sqlite_query(sql_query, context.db_name)
             else:
@@ -131,7 +131,7 @@ class QueryExecutionAgent:
     
     def execute_postgres_query(self, query: str) -> Optional[pd.DataFrame]:
         """
-        Execute an SQL query against a PostgreSQL database.
+        Execute an SQL query against a MySQL database.
         
         Args:
             query: SQL query to execute
@@ -141,7 +141,7 @@ class QueryExecutionAgent:
         """
         try:
             if not self.engine:
-                print("PostgreSQL engine not initialized")
+                print("MySQL engine not initialized")
                 return None
                 
             # Remove any trailing "WHERE user_id = 'X'" conditions to avoid errors
@@ -169,22 +169,50 @@ class QueryExecutionAgent:
                 # Make sure we don't accidentally append more conditions that could cause errors
                 query = query.rstrip(';') + ';'
             
+            # Check if the query contains a FROM clause without the user_id suffix in table name
+            # This is a common issue where the LLM generates queries with just the base table name
+            from_match = re.search(r'FROM\s+([`"]?)(\w+)([`"]?)', query, re.IGNORECASE)
+            if from_match:
+                table_name = from_match.group(2)
+                # Check if this table exists in the database
+                with self.engine.connect() as conn:
+                    inspector = inspect(self.engine)
+                    all_tables = inspector.get_table_names(schema='parseqri')
+                    
+                    # If the table doesn't exist, check if there's a version with user_id suffix
+                    if table_name not in all_tables:
+                        # Look for tables with this base name followed by underscore (potential user_id suffix)
+                        potential_tables = [t for t in all_tables if t.startswith(f"{table_name}_")]
+                        if potential_tables:
+                            # Use the first matching table
+                            corrected_table = potential_tables[0]
+                            print(f"Table '{table_name}' not found, using '{corrected_table}' instead")
+                            
+                            # Replace the table name in the query
+                            quote_start = from_match.group(1)
+                            quote_end = from_match.group(3)
+                            query = query.replace(
+                                f"FROM {quote_start}{table_name}{quote_end}", 
+                                f"FROM {quote_start}{corrected_table}{quote_end}"
+                            )
+                            print(f"Corrected query: {query}")
+            
             # Print the final query for debugging
             print(f"Executing SQL query: {query}")
                 
             # Execute query and fetch results
             with self.engine.connect() as conn:
                 results = pd.read_sql_query(text(query), conn)
-                print(f"Query executed successfully against PostgreSQL database")
+                print(f"Query executed successfully against MySQL database")
                 return results
                 
         except Exception as e:
-            print(f"Error executing PostgreSQL query: {e}")
+            print(f"Error executing MySQL query: {e}")
             print(f"Query was: {query}")
             return None
     
     def _get_available_users(self):
-        """Get list of users with data in PostgreSQL"""
+        """Get list of users with data in MySQL"""
         try:
             if not self.engine:
                 return []
@@ -192,7 +220,7 @@ class QueryExecutionAgent:
             user_ids = set()
             with self.engine.connect() as conn:
                 inspector = inspect(self.engine)
-                all_tables = inspector.get_table_names(schema='public')
+                all_tables = inspector.get_table_names(schema='parseqri')
                 
                 # Extract user IDs from table names (format: user_id_tablename)
                 for table in all_tables:

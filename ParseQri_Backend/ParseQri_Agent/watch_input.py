@@ -210,26 +210,117 @@ def process_files(new_files):
                     except Exception as e:
                         print(f"Error reading database mappings: {str(e)}")
                 
-                # Additional command arguments for database ID if available
-                cmd_args = [
-                    python_executable, 
-                    "main.py", 
-                    "--upload", str(csv_file),
-                    "--user", user_id,
-                    "--table", table_name
-                ]
-                
-                # Add database ID if available
-                if db_id is not None:
-                    cmd_args.extend(["--db-id", str(db_id)])
-                
-                # Run TextToSQL_Agent with the upload parameter
-                upload_result = subprocess.run(
-                    cmd_args,
-                    cwd=str(TEXTSQL_AGENT_DIR),
-                    capture_output=True,
-                    text=True
-                )
+                # Check if we should use the new TextToSQL_Agent or the old one
+                if (TEXTSQL_AGENT_DIR / "api.py").exists():
+                    # Use new TextToSQL_Agent with PipelineRequest through API
+                    print("Using new TextToSQL_Agent implementation...")
+                    
+                    # Create a simple script to use the pipeline directly
+                    temp_script = TEXTSQL_AGENT_DIR / "temp_upload.py"
+                    with open(temp_script, 'w') as f:
+                        f.write("""
+import asyncio
+import sys
+from pathlib import Path
+from core import TextToSQLPipeline
+from models.data_models import PipelineRequest
+
+async def upload_csv(csv_path, user_id, table_name, db_id=None):
+    # Create pipeline
+    async with TextToSQLPipeline() as pipeline:
+        # Create request
+        options = {}
+        if db_id:
+            options["db_id"] = db_id
+            
+        request = PipelineRequest(
+            user_id=user_id,
+            query=f"Import data from {Path(csv_path).name}",
+            database_id=db_id,
+            options={
+                "csv_path": csv_path,
+                "table_name": table_name,
+                **options
+            }
+        )
+        
+        # Mock auth token for local use
+        auth_token = "local_development_token"
+        
+        # Process the request
+        response = await pipeline.process(request, auth_token)
+        
+        # Print results
+        if response.success:
+            print(f"SUCCESS: Data imported to table {table_name}")
+            if response.natural_answer:
+                print(response.natural_answer)
+        else:
+            print(f"ERROR: {response.error}")
+            
+        return response.success
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print("Usage: python temp_upload.py <csv_path> <user_id> <table_name> [db_id]")
+        sys.exit(1)
+        
+    csv_path = sys.argv[1]
+    user_id = sys.argv[2]
+    table_name = sys.argv[3]
+    db_id = sys.argv[4] if len(sys.argv) > 4 else None
+    
+    success = asyncio.run(upload_csv(csv_path, user_id, table_name, db_id))
+    sys.exit(0 if success else 1)
+""")
+                    
+                    # Run the script
+                    cmd_args = [
+                        python_executable,
+                        "temp_upload.py",
+                        str(csv_file),
+                        user_id,
+                        table_name
+                    ]
+                    
+                    # Add database ID if available
+                    if db_id is not None:
+                        cmd_args.append(str(db_id))
+                    
+                    upload_result = subprocess.run(
+                        cmd_args,
+                        cwd=str(TEXTSQL_AGENT_DIR),
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    # Clean up temp script
+                    temp_script.unlink(missing_ok=True)
+                    
+                else:
+                    # Use old TextToSQL_Agent
+                    print("Using original TextToSQL_Agent implementation...")
+                    
+                    # Additional command arguments for database ID if available
+                    cmd_args = [
+                        python_executable, 
+                        "main.py", 
+                        "--upload", str(csv_file),
+                        "--user", user_id,
+                        "--table", table_name
+                    ]
+                    
+                    # Add database ID if available
+                    if db_id is not None:
+                        cmd_args.extend(["--db-id", str(db_id)])
+                    
+                    # Run TextToSQL_Agent with the upload parameter
+                    upload_result = subprocess.run(
+                        cmd_args,
+                        cwd=str(TEXTSQL_AGENT_DIR),
+                        capture_output=True,
+                        text=True
+                    )
                 
                 if upload_result.returncode == 0:
                     print(f"CSV processing completed successfully!")
@@ -250,58 +341,41 @@ def process_files(new_files):
                         "output": upload_result.stdout.strip()
                     }
                     
-                    # Add db_id if available
-                    if db_id is not None:
-                        metadata["db_id"] = db_id
-                    
-                    with open(user_db_dir / f"{table_name}_metadata.json", "w") as f:
+                    metadata_file = user_db_dir / f"{table_name}_metadata.json"
+                    with open(metadata_file, 'w') as f:
                         json.dump(metadata, f, indent=2)
                     
-                    # Add to processed files list
                     processed_files.append(csv_file.name)
                 else:
                     print(f"Error processing CSV file: {upload_result.stderr}")
-                    
-                    # Log error to a file
-                    user_db_dir = DB_STORAGE_DIR / user_id
-                    user_db_dir.mkdir(exist_ok=True)
-                    
-                    # Save error metadata
-                    error_metadata = {
-                        "file": csv_file.name,
-                        "user_id": user_id,
-                        "table_name": table_name,
-                        "db_name": db_name,
-                        "import_time": time.strftime('%Y-%m-%d %H:%M:%S'),
-                        "status": "error",
-                        "error": upload_result.stderr
-                    }
-                    
-                    with open(user_db_dir / f"{table_name}_error.json", "w") as f:
-                        json.dump(error_metadata, f, indent=2)
         except Exception as e:
             print(f"Error during CSV processing: {str(e)}")
-            
+    
     return processed_files
 
 def main():
     """Main function to monitor the input directory"""
     setup_directories()
     
-    processed_files = set()
-    print("\nWatching for new files... (Press Ctrl+C to stop)")
+    processed_files = []
+    
+    print("Starting file monitoring. Press Ctrl+C to stop.")
     
     try:
         while True:
+            # Check for new files
             new_files = check_for_new_files(processed_files)
-            if new_files:
-                newly_processed = process_files(new_files)
-                processed_files.update(newly_processed)
             
-            time.sleep(5)  # Check every 5 seconds
+            if new_files:
+                # Process new files
+                newly_processed = process_files(new_files)
+                processed_files.extend(newly_processed)
+            
+            # Wait before checking again
+            time.sleep(5)
             
     except KeyboardInterrupt:
-        print("\nFile watching stopped by user.")
-        
+        print("\nStopping file monitoring.")
+
 if __name__ == "__main__":
     main() 

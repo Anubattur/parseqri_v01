@@ -226,7 +226,7 @@ const LandingPage = () => {
                 variants={buttonVariants}
               >
                 <Link
-                  to="/dashboard"
+                  to="/login"
                   className="w-full flex items-center justify-center px-8 py-4 border border-transparent text-base font-medium rounded-full text-primary-600 bg-white hover:bg-gray-50 md:text-lg md:px-10"
                 >
                   Sign in to Dashboard

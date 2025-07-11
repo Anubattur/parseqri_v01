@@ -13,7 +13,7 @@ from pathlib import Path
 from app.core.database import Base, engine
 from app.routes.api import router
 from app.auth.routes import router as auth_router
-from app.routes.data import router as data_router
+from app.routes.data import router as data_router, global_router as data_global_router, api_router as data_api_router
 from app.db.routes import router as db_router
 
 # OAuth2 scheme for Swagger UI authorization
@@ -21,7 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 app = FastAPI(
     title="ParseQri API",
-    description="API for parsing and analyzing data with PostgreSQL",
+    description="API for parsing and analyzing data with MySQL, PostgreSQL, and MongoDB support",
     version="1.0.0",
     swagger_ui_parameters={
         "defaultModelsExpandDepth": -1,
@@ -46,6 +46,10 @@ Base.metadata.create_all(bind=engine)
 # Include routers
 # Include API router last to avoid route overlaps
 app.include_router(router)
+
+# Include additional dataset routers for frontend compatibility
+app.include_router(data_global_router)
+app.include_router(data_api_router)
 
 # Start the watch_input.py script that monitors the input directory
 def start_watcher():
@@ -118,7 +122,8 @@ def read_root():
         "app": "ParseQri API",
         "version": "1.0.0",
         "documentation": "/docs",
-        "database": "PostgreSQL"
+        "database": "MySQL (with PostgreSQL and MongoDB support)",
+        "features": ["Multi-database support", "ChromaDB integration", "File upload", "Natural language queries"]
     }
 
 # Customize OpenAPI schema to add security

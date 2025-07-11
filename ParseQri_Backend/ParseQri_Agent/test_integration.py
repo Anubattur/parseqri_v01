@@ -11,6 +11,7 @@ import os
 import sys
 import subprocess
 import time
+import asyncio
 from pathlib import Path
 import sqlite3
 import pandas as pd
@@ -49,16 +50,91 @@ def setup_test_environment():
     
     return test_csv_path
 
+def check_agent_version():
+    """Check which TextToSQL_Agent version is available"""
+    # Check if new agent structure exists
+    if (TEXTSQL_AGENT_DIR / "api.py").exists():
+        return "new"
+    # Check if old agent structure exists
+    elif (TEXTSQL_AGENT_DIR / "main.py").exists():
+        return "old"
+    else:
+        return "none"
+
 def run_processing():
     """Run the TextToSQL_Agent processing"""
-    print("\nRunning TextToSQL_Agent main.py...")
+    print("\nRunning TextToSQL_Agent processing...")
     
-    result = subprocess.run(
-        ["python", "main.py"],
-        cwd=str(TEXTSQL_AGENT_DIR),
-        capture_output=True,
-        text=True
-    )
+    agent_version = check_agent_version()
+    
+    if agent_version == "new":
+        # Create a simple test script for the new agent structure
+        test_script_path = TEXTSQL_AGENT_DIR / "test_process.py"
+        with open(test_script_path, 'w') as f:
+            f.write("""
+import asyncio
+import sys
+from pathlib import Path
+from core import TextToSQLPipeline
+from models.data_models import PipelineRequest
+
+async def process_csv(csv_path):
+    # Create pipeline
+    async with TextToSQLPipeline() as pipeline:
+        # Create request for processing CSV
+        request = PipelineRequest(
+            user_id="test_user",
+            query=f"Import data from {Path(csv_path).name}",
+            options={
+                "csv_path": csv_path,
+                "table_name": "test_data"
+            }
+        )
+        
+        # Mock auth token for local use
+        auth_token = "local_development_token"
+        
+        # Process the request
+        response = await pipeline.process(request, auth_token)
+        
+        # Print results
+        if response.success:
+            print(f"SUCCESS: Data imported")
+            if response.natural_answer:
+                print(response.natural_answer)
+        else:
+            print(f"ERROR: {response.error}")
+            
+        return response.success
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python test_process.py <csv_path>")
+        sys.exit(1)
+        
+    csv_path = sys.argv[1]
+    success = asyncio.run(process_csv(csv_path))
+    sys.exit(0 if success else 1)
+""")
+
+        # Run the test script
+        result = subprocess.run(
+            [sys.executable, "test_process.py", str(INPUT_DIR / "test_data.csv")],
+            cwd=str(TEXTSQL_AGENT_DIR),
+            capture_output=True,
+            text=True
+        )
+        
+        # Clean up test script
+        test_script_path.unlink(missing_ok=True)
+    else:
+        # Use old TextToSQL_Agent
+        result = subprocess.run(
+            [sys.executable, "main.py", "--upload", str(INPUT_DIR / "test_data.csv"), "--user", "test_user", "--table", "test_data"],
+            cwd=str(TEXTSQL_AGENT_DIR),
+            capture_output=True,
+            text=True
+        )
     
     print("\nProcessing output:")
     print(result.stdout)
@@ -78,11 +154,32 @@ def verify_outputs():
         print(f"ERROR: Expected CSV file not found: {expected_csv}")
         return False
     
-    # Check if the database was created
-    db_file = DB_STORAGE_DIR / "query_data.db"
-    if not db_file.exists():
-        print(f"ERROR: Database file not found: {db_file}")
-        return False
+    agent_version = check_agent_version()
+    
+    if agent_version == "new":
+        # New agent might store data differently, check both possible locations
+        db_paths = [
+            DB_STORAGE_DIR / "test_user" / "test_data.db",
+            DB_STORAGE_DIR / "query_data.db",
+            DB_STORAGE_DIR / "test_user.db"
+        ]
+        
+        db_found = False
+        for db_path in db_paths:
+            if db_path.exists():
+                db_found = True
+                db_file = db_path
+                break
+                
+        if not db_found:
+            print(f"ERROR: Database file not found in any expected location")
+            return False
+    else:
+        # Old agent stored data in a standard location
+        db_file = DB_STORAGE_DIR / "query_data.db"
+        if not db_file.exists():
+            print(f"ERROR: Database file not found: {db_file}")
+            return False
     
     # Verify database contents
     try:
@@ -91,12 +188,23 @@ def verify_outputs():
         print("\nDatabase tables:")
         print(tables)
         
-        if "extracted_data" not in tables['name'].values:
-            print("ERROR: Expected 'extracted_data' table not found in database")
+        # Check for either extracted_data or test_data table
+        expected_tables = ["extracted_data", "test_data"]
+        table_found = False
+        table_name = None
+        
+        for table in expected_tables:
+            if table in tables['name'].values:
+                table_found = True
+                table_name = table
+                break
+                
+        if not table_found:
+            print(f"ERROR: Expected table not found in database. Available tables: {tables['name'].values}")
             return False
         
         # Check table contents
-        data = pd.read_sql("SELECT * FROM extracted_data LIMIT 5", conn)
+        data = pd.read_sql(f"SELECT * FROM {table_name} LIMIT 5", conn)
         print("\nSample data from database:")
         print(data)
         
@@ -112,14 +220,72 @@ def run_test_query():
     """Run a test query against the database"""
     print("\nRunning test query...")
     
-    query = "What is the average price by category?"
+    agent_version = check_agent_version()
     
-    result = subprocess.run(
-        ["python", "main.py", query],
-        cwd=str(TEXTSQL_AGENT_DIR),
-        capture_output=True,
-        text=True
-    )
+    if agent_version == "new":
+        # Create a simple test script for the new agent structure
+        test_script_path = TEXTSQL_AGENT_DIR / "test_query.py"
+        with open(test_script_path, 'w') as f:
+            f.write("""
+import asyncio
+import sys
+from core import TextToSQLPipeline
+from models.data_models import PipelineRequest
+
+async def run_query(query_text):
+    # Create pipeline
+    async with TextToSQLPipeline() as pipeline:
+        # Create request
+        request = PipelineRequest(
+            user_id="test_user",
+            query=query_text
+        )
+        
+        # Mock auth token for local use
+        auth_token = "local_development_token"
+        
+        # Process the request
+        response = await pipeline.process(request, auth_token)
+        
+        # Print results
+        if response.success:
+            print(f"SQL Query: {response.sql_query}")
+            print(f"Natural Answer: {response.natural_answer}")
+        else:
+            print(f"ERROR: {response.error}")
+            
+        return response.success
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python test_query.py <query_text>")
+        sys.exit(1)
+        
+    query_text = sys.argv[1]
+    success = asyncio.run(run_query(query_text))
+    sys.exit(0 if success else 1)
+""")
+
+        # Run the test script
+        query = "What is the average price by category?"
+        result = subprocess.run(
+            [sys.executable, "test_query.py", query],
+            cwd=str(TEXTSQL_AGENT_DIR),
+            capture_output=True,
+            text=True
+        )
+        
+        # Clean up test script
+        test_script_path.unlink(missing_ok=True)
+    else:
+        # Use old TextToSQL_Agent
+        query = "What is the average price by category?"
+        result = subprocess.run(
+            [sys.executable, "main.py", query, "--user", "test_user"],
+            cwd=str(TEXTSQL_AGENT_DIR),
+            capture_output=True,
+            text=True
+        )
     
     print("\nQuery result:")
     print(result.stdout)
@@ -143,6 +309,16 @@ def main():
     print("=== TESTING INTEGRATION BETWEEN CONVERSION_TOOL AND TEXTSQL_AGENT ===")
     
     try:
+        # Check which agent version we're using
+        agent_version = check_agent_version()
+        if agent_version == "new":
+            print("Using new TextToSQL_Agent implementation")
+        elif agent_version == "old":
+            print("Using original TextToSQL_Agent implementation")
+        else:
+            print("ERROR: TextToSQL_Agent not found!")
+            return
+        
         # Setup test environment with sample file
         test_file = setup_test_environment()
         

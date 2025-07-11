@@ -1,106 +1,138 @@
 from typing import Any, Dict, List, Optional
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.sql import text
+import mysql.connector
 import psycopg2
+import pymongo
 from app.core.exceptions import DatabaseConnectionError, DataInsertionError
-from app.schemas.db import DBConfigOut
+from app.schemas.db import DBConfigOut, DBType
 import os
+import chromadb
+from sentence_transformers import SentenceTransformer
 
-class PostgresConnector:
+class ChromaDBManager:
+    """Centralized ChromaDB manager for all users and data sources"""
+    
+    def __init__(self, persist_dir: str = "./data/chroma_storage"):
+        self.persist_dir = persist_dir
+        os.makedirs(persist_dir, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=persist_dir)
+        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        
+    def get_collection(self, collection_name: str = "unified_metadata"):
+        """Get or create a unified collection for all metadata"""
+        try:
+            collection = self.client.get_collection(collection_name)
+        except:
+            collection = self.client.create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"}
+            )
+        return collection
+    
+    def store_table_metadata(self, user_id: int, source_type: str, source_name: str, 
+                           table_name: str, schema_info: Dict[str, Any]):
+        """Store table metadata in ChromaDB with user context"""
+        collection = self.get_collection()
+        
+        # Create metadata document
+        metadata_text = f"""
+        Table: {table_name}
+        Source: {source_name} ({source_type})
+        User: {user_id}
+        Columns: {', '.join([f"{col['column_name']} ({col['data_type']})" for col in schema_info.get('columns', [])])}
+        Description: Table from {source_type} database containing {len(schema_info.get('columns', []))} columns
+        """
+        
+        # Generate embedding
+        embedding = self.encoder.encode(metadata_text).tolist()
+        
+        # Store in ChromaDB
+        doc_id = f"{user_id}_{source_type}_{source_name}_{table_name}"
+        collection.upsert(
+            ids=[doc_id],
+            embeddings=[embedding],
+            documents=[metadata_text],
+            metadatas=[{
+                "user_id": str(user_id),
+                "source_type": source_type,
+                "source_name": source_name,
+                "table_name": table_name,
+                "column_count": len(schema_info.get('columns', []))
+            }]
+        )
+    
+    def search_relevant_tables(self, user_id: int, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Search for relevant tables based on query"""
+        collection = self.get_collection()
+        
+        # Generate query embedding
+        query_embedding = self.encoder.encode(query).tolist()
+        
+        # Search ChromaDB
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=limit,
+            where={"user_id": str(user_id)}
+        )
+        
+        return results
+
+class MySQLConnector:
     def __init__(self, config: DBConfigOut):
         self.config = config
         self.connection = None
         self.engine = None
-        # Always connect immediately on initialization
         self.connect()
 
     def connect(self) -> None:
-        """
-        Establishes a connection to the PostgreSQL database.
-        Creates the database if it doesn't exist.
-        """
+        """Establishes a connection to the MySQL database."""
         try:
-            # First try to connect to the default 'postgres' database to check if our target database exists
-            try:
-                # Connect to default postgres database
-                temp_conn = psycopg2.connect(
-                    user=self.config.db_user,
-                    password=self.config.db_password,
-                    host=self.config.host,
-                    port=self.config.port,
-                    database="postgres"
-                )
-                temp_conn.autocommit = True
-                cursor = temp_conn.cursor()
-                
-                # Check if the database exists
-                cursor.execute(f"SELECT 1 FROM pg_database WHERE datname = '{self.config.db_name}'")
-                exists = cursor.fetchone()
-                
-                # If it doesn't exist, create it
-                if not exists:
-                    print(f"Creating PostgreSQL database: {self.config.db_name}")
-                    cursor.execute(f"CREATE DATABASE {self.config.db_name}")
-                
-                cursor.close()
-                temp_conn.close()
-            except Exception as e:
-                print(f"Warning: Could not check or create database: {str(e)}")
+            # Create database if it doesn't exist
+            temp_conn = mysql.connector.connect(
+                user=self.config.db_user,
+                password=self.config.db_password,
+                host=self.config.host,
+                port=self.config.port
+            )
+            cursor = temp_conn.cursor()
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.config.db_name}")
+            cursor.close()
+            temp_conn.close()
             
-            # Now connect to the target database
+            # Connect to the target database
             self.engine = create_engine(
-                f"postgresql://{self.config.db_user}:{self.config.db_password}@{self.config.host}:{self.config.port}/{self.config.db_name}"
+                f"mysql+pymysql://{self.config.db_user}:{self.config.db_password}@{self.config.host}:{self.config.port}/{self.config.db_name}"
             )
             self.connection = self.engine.connect()
         except Exception as e:
-            raise DatabaseConnectionError(f"Failed to connect to PostgreSQL: {str(e)}")
+            raise DatabaseConnectionError(f"Failed to connect to MySQL: {str(e)}")
 
     def execute_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Executes an SQL query on the PostgreSQL database.
-        
-        Args:
-            query: The SQL query to execute
-            params: Query parameters
-        """
+        """Executes an SQL query on the MySQL database."""
         if not self.connection:
             self.connect()
         try:
-            # In SQLAlchemy 1.4, begin a transaction explicitly
             with self.connection.begin():
                 self.connection.execute(text(query), params or {})
-                # No need to commit, the transaction context manager handles it
         except Exception as e:
             raise DatabaseConnectionError(f"Query execution failed: {str(e)}")
     
     def fetch_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """
-        Executes a query and returns the results.
-        
-        Args:
-            query: The SQL query to execute
-            params: Query parameters
-            
-        Returns:
-            A list of dictionaries containing the query results
-        """
+        """Executes a query and returns the results."""
         if not self.connection:
             self.connect()
         try:
             result = self.connection.execute(text(query), params or {})
-            # Fixed: Convert row objects to dictionaries properly
-            return [dict(zip(row.keys(), row)) for row in result]
+            # Fix for SQLAlchemy result handling - properly convert to list of dicts
+            columns = list(result.keys())
+            rows = result.fetchall()
+            return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
             raise DatabaseConnectionError(f"Query execution failed: {str(e)}")
 
     def insert_data(self, table: str, data: List[Dict[str, Any]]) -> None:
-        """
-        Inserts data into a table.
-        
-        Args:
-            table: The table to insert data into
-            data: A list of dictionaries with column names as keys
-        """
+        """Inserts data into a table."""
         if not self.connection:
             self.connect()
         try:
@@ -112,25 +144,143 @@ class PostgresConnector:
             placeholders = ", ".join([f":{key}" for key in keys])
             query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
             
-            # Use transaction context manager
             with self.connection.begin():
                 for row in data:
                     self.connection.execute(text(query), row)
-                # No need to commit, the transaction context manager handles it
         except Exception as e:
             raise DataInsertionError(f"Data insertion failed: {str(e)}")
     
     def get_table_schema(self, table_name: str) -> List[Dict[str, Any]]:
+        """Retrieves schema information for a specified table."""
+        query = """
+            SELECT 
+                COLUMN_NAME as column_name,
+                DATA_TYPE as data_type,
+                IS_NULLABLE as is_nullable,
+                COLUMN_DEFAULT as column_default
+            FROM 
+                INFORMATION_SCHEMA.COLUMNS
+            WHERE 
+                TABLE_NAME = :table_name AND TABLE_SCHEMA = :schema
+            ORDER BY 
+                ORDINAL_POSITION;
         """
-        Retrieves schema information for a specified table.
-        
-        Args:
-            table_name: The name of the table
+        try:
+            return self.fetch_query(query, {"table_name": table_name, "schema": self.config.db_name})
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to get table schema: {str(e)}")
+    
+    def list_tables(self) -> List[str]:
+        """Lists all tables in the current database."""
+        try:
+            query = """
+                SELECT 
+                    TABLE_NAME as table_name
+                FROM 
+                    INFORMATION_SCHEMA.TABLES 
+                WHERE 
+                    TABLE_SCHEMA = :schema
+                ORDER BY 
+                    TABLE_NAME;
+            """
+            result = self.fetch_query(query, {"schema": self.config.db_name})
+            return [row["table_name"] for row in result]
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to list tables: {str(e)}")
+
+    def close(self) -> None:
+        """Closes the database connection."""
+        if self.connection:
+            self.connection.close()
+            if self.engine:
+                self.engine.dispose()
+            self.connection = None
+
+class PostgresConnector:
+    def __init__(self, config: DBConfigOut):
+        self.config = config
+        self.connection = None
+        self.engine = None
+        self.connect()
+
+    def connect(self) -> None:
+        """Establishes a connection to the PostgreSQL database."""
+        try:
+            # Create database if it doesn't exist
+            try:
+                temp_conn = psycopg2.connect(
+                    user=self.config.db_user,
+                    password=self.config.db_password,
+                    host=self.config.host,
+                    port=self.config.port,
+                    database="postgres"
+                )
+                temp_conn.autocommit = True
+                cursor = temp_conn.cursor()
+                
+                cursor.execute(f"SELECT 1 FROM pg_database WHERE datname = '{self.config.db_name}'")
+                exists = cursor.fetchone()
+                
+                if not exists:
+                    cursor.execute(f"CREATE DATABASE {self.config.db_name}")
+                
+                cursor.close()
+                temp_conn.close()
+            except Exception as e:
+                print(f"Warning: Could not check or create database: {str(e)}")
             
-        Returns:
-            A list of dictionaries with column information
-        """
-        # Modified query with proper column names and aliases
+            # Connect to the target database
+            self.engine = create_engine(
+                f"postgresql://{self.config.db_user}:{self.config.db_password}@{self.config.host}:{self.config.port}/{self.config.db_name}"
+            )
+            self.connection = self.engine.connect()
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to connect to PostgreSQL: {str(e)}")
+
+    def execute_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> None:
+        """Executes an SQL query on the PostgreSQL database."""
+        if not self.connection:
+            self.connect()
+        try:
+            with self.connection.begin():
+                self.connection.execute(text(query), params or {})
+        except Exception as e:
+            raise DatabaseConnectionError(f"Query execution failed: {str(e)}")
+    
+    def fetch_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Executes a query and returns the results."""
+        if not self.connection:
+            self.connect()
+        try:
+            result = self.connection.execute(text(query), params or {})
+            # Fix for SQLAlchemy result handling - properly convert to list of dicts
+            columns = list(result.keys())
+            rows = result.fetchall()
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            raise DatabaseConnectionError(f"Query execution failed: {str(e)}")
+
+    def insert_data(self, table: str, data: List[Dict[str, Any]]) -> None:
+        """Inserts data into a table."""
+        if not self.connection:
+            self.connect()
+        try:
+            if not data:
+                return
+                
+            keys = data[0].keys()
+            columns = ", ".join(keys)
+            placeholders = ", ".join([f":{key}" for key in keys])
+            query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
+            
+            with self.connection.begin():
+                for row in data:
+                    self.connection.execute(text(query), row)
+        except Exception as e:
+            raise DataInsertionError(f"Data insertion failed: {str(e)}")
+    
+    def get_table_schema(self, table_name: str) -> List[Dict[str, Any]]:
+        """Retrieves schema information for a specified table."""
         query = """
             SELECT 
                 column_name AS column_name, 
@@ -147,63 +297,10 @@ class PostgresConnector:
         try:
             return self.fetch_query(query, {"table_name": table_name})
         except Exception as e:
-            # Fall back to a direct psycopg2 implementation if the SQLAlchemy approach fails
-            try:
-                # Connect directly with psycopg2
-                conn = psycopg2.connect(
-                    user=self.config.db_user,
-                    password=self.config.db_password,
-                    host=self.config.host,
-                    port=self.config.port,
-                    database=self.config.db_name
-                )
-                cursor = conn.cursor()
-                
-                # Execute query
-                cursor.execute(
-                    """
-                    SELECT 
-                        column_name, 
-                        data_type, 
-                        is_nullable,
-                        column_default
-                    FROM 
-                        information_schema.columns
-                    WHERE 
-                        table_name = %s
-                    ORDER BY 
-                        ordinal_position;
-                    """, 
-                    (table_name,)
-                )
-                
-                # Get columns names from cursor description
-                columns = [desc[0] for desc in cursor.description]
-                
-                # Fetch all rows and convert to dictionaries
-                rows = cursor.fetchall()
-                result = []
-                for row in rows:
-                    result.append({
-                        "column_name": row[0],
-                        "data_type": row[1],
-                        "is_nullable": row[2],
-                        "column_default": row[3]
-                    })
-                
-                cursor.close()
-                conn.close()
-                return result
-            except Exception as fallback_error:
-                raise DatabaseConnectionError(f"Failed to get table schema (both methods): {str(e)} | {str(fallback_error)}")
+            raise DatabaseConnectionError(f"Failed to get table schema: {str(e)}")
     
     def list_tables(self) -> List[str]:
-        """
-        Lists all tables in the current database.
-        
-        Returns:
-            A list of table names
-        """
+        """Lists all tables in the current database."""
         try:
             query = """
                 SELECT 
@@ -218,40 +315,7 @@ class PostgresConnector:
             result = self.fetch_query(query)
             return [row["table_name"] for row in result]
         except Exception as e:
-            # Fallback to direct psycopg2 if SQLAlchemy approach fails
-            try:
-                # Connect directly with psycopg2
-                conn = psycopg2.connect(
-                    user=self.config.db_user,
-                    password=self.config.db_password,
-                    host=self.config.host,
-                    port=self.config.port,
-                    database=self.config.db_name
-                )
-                cursor = conn.cursor()
-                
-                # Execute query
-                cursor.execute(
-                    """
-                    SELECT 
-                        table_name 
-                    FROM 
-                        information_schema.tables 
-                    WHERE 
-                        table_schema='public' 
-                    ORDER BY 
-                        table_name;
-                    """
-                )
-                
-                # Fetch all rows
-                tables = [row[0] for row in cursor.fetchall()]
-                
-                cursor.close()
-                conn.close()
-                return tables
-            except Exception as fallback_error:
-                raise DatabaseConnectionError(f"Failed to list tables (both methods): {str(e)} | {str(fallback_error)}")
+            raise DatabaseConnectionError(f"Failed to list tables: {str(e)}")
 
     def close(self) -> None:
         """Closes the database connection."""
@@ -261,5 +325,87 @@ class PostgresConnector:
                 self.engine.dispose()
             self.connection = None
 
-# For backwards compatibility with existing code
-DatabaseConnector = PostgresConnector 
+class MongoDBConnector:
+    def __init__(self, config: DBConfigOut):
+        self.config = config
+        self.client = None
+        self.database = None
+        self.connect()
+
+    def connect(self) -> None:
+        """Establishes a connection to the MongoDB database."""
+        try:
+            connection_string = f"mongodb://{self.config.db_user}:{self.config.db_password}@{self.config.host}:{self.config.port}/{self.config.db_name}"
+            self.client = pymongo.MongoClient(connection_string)
+            self.database = self.client[self.config.db_name]
+            # Test connection
+            self.client.admin.command('ping')
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to connect to MongoDB: {str(e)}")
+
+    def list_collections(self) -> List[str]:
+        """Lists all collections in the current database."""
+        try:
+            return self.database.list_collection_names()
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to list collections: {str(e)}")
+
+    def get_collection_schema(self, collection_name: str) -> List[Dict[str, Any]]:
+        """Retrieves schema information for a specified collection."""
+        try:
+            collection = self.database[collection_name]
+            # Sample a few documents to infer schema
+            sample_docs = list(collection.find().limit(100))
+            
+            if not sample_docs:
+                return []
+            
+            # Infer schema from sample documents
+            schema = {}
+            for doc in sample_docs:
+                for key, value in doc.items():
+                    if key not in schema:
+                        schema[key] = type(value).__name__
+            
+            return [{"column_name": key, "data_type": data_type, "is_nullable": "YES", "column_default": None} 
+                   for key, data_type in schema.items()]
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to get collection schema: {str(e)}")
+
+    def close(self) -> None:
+        """Closes the database connection."""
+        if self.client:
+            self.client.close()
+            self.client = None
+
+class DatabaseConnectorFactory:
+    """Factory class to create appropriate database connectors"""
+    
+    @staticmethod
+    def create_connector(config: DBConfigOut):
+        """Create a database connector based on the database type"""
+        if config.db_type == DBType.mysql:
+            return MySQLConnector(config)
+        elif config.db_type == DBType.postgres:
+            return PostgresConnector(config)
+        elif config.db_type == DBType.mongodb:
+            return MongoDBConnector(config)
+        else:
+            raise ValueError(f"Unsupported database type: {config.db_type}")
+    
+    @staticmethod
+    def test_connection(config: DBConfigOut) -> bool:
+        """Test database connection without storing the connector"""
+        try:
+            connector = DatabaseConnectorFactory.create_connector(config)
+            connector.close()
+            return True
+        except Exception as e:
+            print(f"Database connection test failed: {str(e)}")
+            return False
+
+# Initialize global ChromaDB manager
+chroma_manager = ChromaDBManager()
+
+# For backwards compatibility
+DatabaseConnector = MySQLConnector 

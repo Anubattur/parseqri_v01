@@ -26,11 +26,42 @@ const Dashboard = () => {
   const [recentQueries, setRecentQueries] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [authStatus, setAuthStatus] = useState<{isAuthenticated: boolean, message?: string}>({isAuthenticated: true})
+  const [dataSource, setDataSource] = useState<'file' | 'database' | null>(null)
+  const [isFileUploadDisabled, setIsFileUploadDisabled] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
     // Check authentication status on page load
     checkAuthStatus();
+    
+    // Check data source selection
+    const selectedDataSource = localStorage.getItem('dataSource') as 'file' | 'database' | null
+    if (!selectedDataSource) {
+      // Check if this is a new user who just registered
+      const isNewUser = sessionStorage.getItem('newUserRegistration') === 'true'
+      
+      if (isNewUser) {
+        // Clear the flag and redirect to data source selection
+        sessionStorage.removeItem('newUserRegistration')
+        navigate('/data-source')
+        return
+      }
+      
+      // For existing users without a data source, set a default
+      localStorage.setItem('dataSource', 'file')
+    }
+    
+    setDataSource(selectedDataSource || 'file')
+    setIsFileUploadDisabled(selectedDataSource === 'database')
+    
+    // If database is selected, set current dataset info
+    if (selectedDataSource === 'database') {
+      const configId = localStorage.getItem('databaseConfigId')
+      if (configId) {
+        setCurrentDataset('Connected Database')
+        setCurrentDatasetId(parseInt(configId))
+      }
+    }
     
     // Check if the user has dismissed the welcome message before
     const hasSeenWelcome = localStorage.getItem('hasSeenWelcome');
@@ -278,6 +309,8 @@ const Dashboard = () => {
                   <h2 className="text-lg font-semibold text-primary-800 dark:text-primary-300 mb-2">Welcome to ParseQri!</h2>
                   <p className="text-primary-700 dark:text-primary-400 mb-3">
                     Ask questions in natural language and get instant SQL queries, visualizations, and insights.
+                    {dataSource === 'database' && ' Your database is connected and ready for queries.'}
+                    {dataSource === 'file' && ' Upload CSV or Excel files to get started.'}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button 
@@ -286,17 +319,19 @@ const Dashboard = () => {
                     >
                       Try a sample query <RiArrowRightLine className="ml-1" />
                     </button>
-                    <button
-                      onClick={() => {
-                        const fileInput = document.querySelector('input[type="file"]');
-                        if (fileInput instanceof HTMLElement) {
-                          fileInput.click();
-                        }
-                      }}
-                      className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary-100 dark:bg-primary-800/30 text-primary-800 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-800/50 transition-colors"
-                    >
-                      Upload a CSV <RiArrowRightLine className="ml-1" />
-                    </button>
+                    {dataSource === 'file' && (
+                      <button
+                        onClick={() => {
+                          const fileInput = document.querySelector('input[type="file"]');
+                          if (fileInput instanceof HTMLElement) {
+                            fileInput.click();
+                          }
+                        }}
+                        className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary-100 dark:bg-primary-800/30 text-primary-800 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-800/50 transition-colors"
+                      >
+                        Upload a CSV <RiArrowRightLine className="ml-1" />
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -402,10 +437,29 @@ const Dashboard = () => {
               </div>
               
               <div className="space-y-6">
-                <FileUpload 
-                  onFileUpload={handleFileUpload}
-                  isUploading={isUploading}
-                />
+                {dataSource === 'file' && (
+                  <FileUpload 
+                    onFileUpload={handleFileUpload}
+                    isUploading={isUploading}
+                  />
+                )}
+                
+                {dataSource === 'database' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6"
+                  >
+                    <div className="flex items-center mb-4">
+                      <RiDatabaseLine size={20} className="text-green-600 dark:text-green-400 mr-2" />
+                      <h3 className="text-lg font-medium text-green-900 dark:text-green-100">Database Connected</h3>
+                    </div>
+                    <p className="text-green-700 dark:text-green-300 text-sm mb-4">
+                      Your external database is connected and ready for queries. File upload is disabled.
+                    </p>
+                  </motion.div>
+                )}
                 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}

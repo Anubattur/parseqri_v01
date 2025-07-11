@@ -125,13 +125,29 @@ class SQLGenerationAgent:
             if col_descriptions:
                 metadata_context = "Column descriptions from metadata:\n" + "\n".join(col_descriptions) + "\n\n"
         
+        # Check if we're using an external database (like Sakila)
+        # External databases use table names directly without user prefixes
+        import os
+        external_config_path = os.path.join(os.path.dirname(__file__), "..", "external_db_config.json")
+        use_external_db = os.path.exists(external_config_path)
+        
+        if use_external_db:
+            # For external databases, use table name directly
+            fully_qualified_table = table_name
+            database_note = "This is an external database (e.g., Sakila). Use table names directly."
+        else:
+            # For internal databases, use user-prefixed table names
+            fully_qualified_table = f"{table_name}_{user_id}"
+            database_note = "This is an internal database with user-specific tables."
+        
         # Build the prompt with user context awareness
         return f"""
         Generate an SQL query to answer the following question: "{question}"
         
         Database information:
-        - Table name: {table_name}
-        - This is a multi-user system, but each user has their own tables with the format: tablename_{user_id}
+        - Table name: {fully_qualified_table}
+        - IMPORTANT: You MUST use the exact table name "{fully_qualified_table}" in your SQL query
+        - {database_note}
         
         Table schema:
         {schema_info}
@@ -142,8 +158,9 @@ class SQLGenerationAgent:
         1. Use only columns that exist in the schema
         2. Return only the data that answers the user's question
         3. Use appropriate SQL functions for aggregation, filtering, etc.
-        4. Ensure the query is valid PostgreSQL syntax
-        5. DO NOT add user_id filtering - the tables are already user-specific
+        4. Ensure the query is valid MySQL syntax
+        5. ALWAYS use the EXACT table name "{fully_qualified_table}" in your FROM clause
+        6. For complex queries, you may need to join multiple tables based on the database schema and relationships
         
         Return only the SQL query, without comments, explanations, or markdown formatting.
         """
@@ -181,42 +198,30 @@ class SQLGenerationAgent:
             query: The SQL query to modify
             user_id: User identifier
             table_name: Table name
-            
-        Returns:
-            Updated SQL query with user_id filter
         """
-        # Don't add user_id filter - it causes more problems than it solves
-        # The tables are already prefixed with user_id in their names
-        return query.rstrip(';') + ';'  # Just ensure the query ends with a semicolon
+        # Check if we're using an external database
+        import os
+        external_config_path = os.path.join(os.path.dirname(__file__), "..", "external_db_config.json")
+        use_external_db = os.path.exists(external_config_path)
         
-        # Original implementation below, commented out
-        """
-        # Check if user_id is already in the query
-        if f"user_id = '{user_id}'" in query or f'user_id = "{user_id}"' in query:
+        if use_external_db:
+            # For external databases like Sakila, don't add user filter
             return query
-        
-        # Simple SQL parser to modify WHERE clause
-        query_lower = query.lower()
-        
-        # Check if query has a WHERE clause
-        if " where " in query_lower:
-            # Add AND user_id condition
-            return query.replace(
-                "WHERE", f"WHERE user_id = '{user_id}' AND", 1, 
-            ).replace(
-                "where", f"WHERE user_id = '{user_id}' AND", 1
-            )
-        
-        # No WHERE clause, add one before GROUP BY, ORDER BY, LIMIT, etc.
-        for clause in [" group by ", " order by ", " limit "]:
-            if clause in query_lower:
-                clause_pos = query_lower.find(clause)
-                return f"{query[:clause_pos]} WHERE user_id = '{user_id}'{query[clause_pos:]}"
-        
-        # No clauses at all, add WHERE at the end
-        # return f"{query} WHERE user_id = '{user_id}'"
+            
+        # For internal databases, add user filter
+        if not query:
+            return query
+            
+        # Original user filter logic for internal databases
+        query = query.strip()
+        if "WHERE" in query.upper():
+            # Add user filter to existing WHERE clause
+            query = query.replace("WHERE", f"WHERE user_id = '{user_id}' AND", 1)
+        else:
+            # Add WHERE clause with user filter
+            query = f"{query} WHERE user_id = '{user_id}'"
+            
         return query
-        """
 
     def sanitize_sql_query(self, sql_query: str) -> str:
         """

@@ -58,6 +58,16 @@ async def process_text_to_sql(
         else:
             print(f"Warning: No user_id found in token, using default: {query_data.user_id}")
             
+        # Get user's connected database configuration
+        from app.db.models import UserDatabase
+        user_db_config = db.query(UserDatabase).filter(UserDatabase.user_id == user_id).first()
+        
+        if not user_db_config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No database connection found for user. Please connect a database first."
+            )
+            
         # Get path to TextToSQL_Agent
         agent_dir = Path(__file__).parent.parent.parent / "ParseQri_Agent" / "TextToSQL_Agent"
         main_script = agent_dir / "main.py"
@@ -88,10 +98,14 @@ async def process_text_to_sql(
         # Add user_id parameter if provided
         if query_data.user_id:
             cmd.append(f"--user={query_data.user_id}")
+            
+        # Add database configuration ID to tell the agent which database to use
+        cmd.append(f"--db-id={user_db_config.id}")
         
         # Print the command being executed for debugging
         print(f"Running command: {' '.join(cmd)}")
         print(f"Working directory: {str(agent_dir)}")
+        print(f"Using database: {user_db_config.db_name} ({user_db_config.db_type})")
             
         # Execute the command
         process = subprocess.run(

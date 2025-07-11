@@ -19,6 +19,7 @@ class QueryContext:
     visualization_data: Dict[str, Any] = None
     needs_visualization: bool = False
     cache_hit: bool = False
+    schema_reasoning: Dict[str, Any] = None  # Stores the chain-of-thought reasoning about schema linking
     
 @dataclass
 class AgentResponse:

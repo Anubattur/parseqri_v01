@@ -112,7 +112,7 @@ http://localhost:8000
     "port": 5432,
     "db_name": "mydatabase",
     "db_user": "postgres",
-    "db_password": "yourpassword"
+    "db_password": "root"
   }
   ```
 - **Response**:

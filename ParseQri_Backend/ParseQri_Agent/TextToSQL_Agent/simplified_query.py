@@ -8,6 +8,7 @@ import sys
 import sqlite3
 import subprocess
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
 # Define paths
@@ -122,6 +123,12 @@ def ingest_csv_to_database():
             df.columns = [col.lower().replace(' ', '_').replace('\n', '_').replace('/', '_')
                           .replace(',', '').replace('(', '').replace(')', '')
                           for col in df.columns]
+            
+            # Handle NaN values - replace with None for database compatibility
+            df = df.replace({np.nan: None})
+            
+            # Also handle inf and -inf values
+            df = df.replace([np.inf, -np.inf], None)
             
             # Save to database
             with sqlite3.connect(str(db_path)) as conn:

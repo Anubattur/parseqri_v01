@@ -46,10 +46,29 @@ const Register = ({ setIsAuthenticated }: RegisterProps) => {
       localStorage.setItem('token', loginResponse.access_token)
       localStorage.setItem('username', name)
       
-      // Redirect to dashboard
-      navigate('/dashboard')
+      // Set flag indicating this is a new user registration
+      sessionStorage.setItem('newUserRegistration', 'true')
+      
+      // New users need to select their data source
+      navigate('/data-source')
     } catch (error: any) {
-      setError(error.response?.data?.detail || 'Registration failed. Please try again.')
+      console.error('Registration error:', error)
+      
+      // Handle specific error types
+      if (error.message === 'Network Error') {
+        setError('Unable to connect to the server. Using offline mode for development.')
+        
+        // If we're in development and mock auth is enabled, proceed to data source selection
+        if (localStorage.getItem('isMockAuth') === 'true') {
+          setTimeout(() => {
+            setIsAuthenticated(true)
+            sessionStorage.setItem('newUserRegistration', 'true')
+            navigate('/data-source')
+          }, 1500)
+        }
+      } else {
+        setError(error.response?.data?.detail || 'Registration failed. Please try again.')
+      }
     } finally {
       setIsLoading(false)
     }

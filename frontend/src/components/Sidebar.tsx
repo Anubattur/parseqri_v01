@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
   RiDashboardLine, 
+  RiDatabaseLine,
   RiBarChartBoxLine, 
   RiFileListLine,
   RiLogoutBoxLine
@@ -44,6 +45,21 @@ const Sidebar = () => {
             >
               <RiDashboardLine size={20} />
               <span>Dashboard</span>
+            </NavLink>
+          </li>
+          <li>
+            <NavLink 
+              to="/databases" 
+              className={({ isActive }) => 
+                `flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+                  isActive 
+                    ? 'bg-primary-50 dark:bg-dark-800 text-primary-600 dark:text-primary-400' 
+                    : 'hover:bg-gray-100 dark:hover:bg-dark-800'
+                }`
+              }
+            >
+              <RiDatabaseLine size={20} />
+              <span>Databases</span>
             </NavLink>
           </li>
           <li>

@@ -1,0 +1,19 @@
+{
+  "external_database": {
+    "enabled": false,
+    "type": "mysql",
+    "host": "localhost",
+    "port": 3306,
+    "database": "your_database",
+    "user": "your_user",
+    "password": "your_password"
+  },
+  "user_mapping": {
+    "1": "external_user",
+    "default_user": "external_user"
+  },
+  "table_mapping": {
+    "direct_access": true,
+    "no_user_prefix": true
+  }
+}

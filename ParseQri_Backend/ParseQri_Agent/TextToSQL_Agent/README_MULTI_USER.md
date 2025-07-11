@@ -35,7 +35,7 @@ The `config.json` file includes the necessary configuration for PostgreSQL and C
     "module": "agents.postgres_handler",
     "class": "PostgresHandlerAgent", 
     "params": {
-        "db_url": "postgresql://postgres:password@localhost:5432/parseqri",
+        "db_url": "postgresql://postgres:root@localhost:5432/parseqri",
         "schema": "public"
     }
 },

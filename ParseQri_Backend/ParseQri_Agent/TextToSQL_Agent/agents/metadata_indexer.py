@@ -6,6 +6,7 @@ import ollama
 from typing import Dict, List, Any, Tuple, Optional
 from models.data_models import QueryContext, AgentResponse
 from pathlib import Path
+import re
 
 class MetadataIndexerAgent:
     """
@@ -152,7 +153,14 @@ class MetadataIndexerAgent:
             
             print(f"Successfully loaded CSV with columns: {list(df.columns)}")
             
-            # Try LLM approach, but if it fails, use fallback
+            # Get base name from the CSV file path - this will be our table name
+            base_table_name = Path(csv_path).stem
+            # Remove any numeric suffix that might be part of the file name
+            base_table_name = re.sub(r'_\d+$', '', base_table_name)
+            
+            print(f"Using base table name from file: {base_table_name}")
+            
+            # Try LLM approach for column descriptions only, but if it fails, use fallback
             try:
                 # Get column data types and sample values
                 column_info = {}
@@ -171,15 +179,15 @@ class MetadataIndexerAgent:
                     for col, info in column_info.items()
                 ])
                 
-                # Create improved prompt for LLM
+                # Create improved prompt for LLM - only for column descriptions
                 prompt = f"""
-                Task: Analyze CSV data and generate clean, simple metadata
+                Task: Analyze CSV data and generate clean, simple column descriptions
 
                 CSV File Analysis:
                 {column_summary}
 
                 Instructions:
-                1. Identify a clear, concise table name that describes this dataset (avoid using 'data', 'table', or generic names)
+                1. The table name will be: "{base_table_name}" - DO NOT suggest a different name
                 2. For each column, provide a simple, clear description (max 10 words)
                    - Focus on WHAT the column contains, not technical details
                    - Use plain, non-technical language
@@ -187,7 +195,7 @@ class MetadataIndexerAgent:
 
                 Response Format (JSON only):
                 {{
-                  "table_name": "name_user_id",
+                  "table_name": "{base_table_name}",
                   "columns": {{
                     "column1": "Simple description of what this contains",
                     "column2": "Simple description of what this contains",
@@ -197,8 +205,7 @@ class MetadataIndexerAgent:
 
                 Important Rules:
                 - Return ONLY valid JSON, no explanation or other text
-                - Use snake_case for the table_name
-                - Table name MUST NOT start with a number (PostgreSQL requirement)
+                - Use the exact table_name provided: "{base_table_name}"
                 - Keep descriptions very simple and clear
                 - Do NOT include data types in descriptions
                 - Do NOT use technical jargon or database terminology
@@ -231,23 +238,30 @@ class MetadataIndexerAgent:
                     if not isinstance(metadata["columns"], dict):
                         raise ValueError("Columns should be a dictionary")
                     
+                    # Force the table name to be the base name from the file
+                    metadata["table_name"] = base_table_name
+                    
                     print(f"Successfully parsed metadata with table_name: {metadata['table_name']}")
                     return metadata
                     
                 except Exception as e:
                     print(f"Error with LLM: {str(e)}. Using fallback method.")
-                    return self._fallback_metadata_extraction(df, Path(csv_path).stem)
+                    return self._fallback_metadata_extraction(df, base_table_name)
                     
             except Exception as e:
                 print(f"Error preparing LLM prompt: {str(e)}. Using fallback method.")
-                return self._fallback_metadata_extraction(df, Path(csv_path).stem)
+                return self._fallback_metadata_extraction(df, base_table_name)
                 
         except Exception as e:
             print(f"Error loading CSV: {str(e)}")
             
             # Use fallback method with default name
+            base_table_name = Path(csv_path).stem
+            # Remove any numeric suffix that might be part of the file name
+            base_table_name = re.sub(r'_\d+$', '', base_table_name)
+            
             return {
-                "table_name": Path(csv_path).stem,
+                "table_name": base_table_name,
                 "columns": {"file": "CSV data file"}
             }
     
@@ -269,6 +283,7 @@ class MetadataIndexerAgent:
             # Very simple description - just the column name itself without jargon
             columns[clean_col] = f"{col.replace('_', ' ').title()}"
         
+        # Use the exact table name provided without modification
         return {
             "table_name": table_name,
             "columns": columns
@@ -349,61 +364,41 @@ class MetadataIndexerAgent:
     
     def search_relevant_metadata(self, user_id: str, query_text: str) -> Optional[Dict[str, Any]]:
         """
-        Search for relevant table metadata based on a user query.
+        Search for relevant metadata based on the query text.
         
         Args:
             user_id: User identifier
-            query_text: The natural language query
+            query_text: Natural language query text
             
         Returns:
-            Most relevant metadata or None if no match found
+            Dictionary containing relevant metadata if found, None otherwise
         """
         try:
             # Get the collection for this user
             collection = self._get_user_collection(user_id)
             
-            # Query ChromaDB for relevant documents
+            # Search for relevant metadata
             results = collection.query(
                 query_texts=[query_text],
-                n_results=1,
-                where={"user_id": user_id}
+                n_results=1
             )
             
-            if not results['ids'][0]:
-                # No results found
-                return None
+            if results and results['metadatas'] and len(results['metadatas']) > 0:
+                metadata = results['metadatas'][0]
+                
+                # Skip if table name is empty or single letter
+                table_name = metadata.get('table_name', '')
+                if not table_name or len(table_name) <= 1:
+                    print(f"Found invalid table name in metadata: '{table_name}', skipping")
+                    return None
+                    
+                print(f"Found relevant metadata for table: {table_name}")
+                return metadata
             
-            # Get the most relevant metadata
-            document_id = results['ids'][0][0]
-            chroma_metadata = results['metadatas'][0][0]
-            
-            # Extract column information from metadata
-            columns = []
-            column_descriptions = {}
-            
-            # Process metadata keys to find column information
-            for key, value in chroma_metadata.items():
-                if key.startswith('col_'):
-                    # Extract original column name by removing the 'col_' prefix
-                    col_name = key[4:].replace('_', ' ')
-                    columns.append(col_name)
-                    column_descriptions[col_name] = value
-            
-            # If no columns were found but we have columns_list
-            if not columns and 'columns_list' in chroma_metadata:
-                columns = chroma_metadata['columns_list'].split(',')
-                for col in columns:
-                    column_descriptions[col] = col.replace('_', ' ').title()
-            
-            return {
-                "document_id": document_id,
-                "table_name": chroma_metadata.get("table_name"),
-                "columns": columns,
-                "column_descriptions": column_descriptions
-            }
+            return None
             
         except Exception as e:
-            print(f"Error searching relevant metadata: {e}")
+            print(f"Error searching metadata: {str(e)}")
             return None
     
     def list_user_tables(self, user_id: str) -> List[Dict[str, Any]]:

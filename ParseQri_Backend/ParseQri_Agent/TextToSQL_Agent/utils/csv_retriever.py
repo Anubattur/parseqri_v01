@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import sqlite3
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
@@ -155,6 +156,12 @@ class CSVRetriever:
             # Clean column names if requested
             if clean_names:
                 df = self.clean_column_names(df)
+            
+            # Handle NaN values - replace with None for database compatibility
+            df = df.replace({np.nan: None})
+            
+            # Also handle inf and -inf values
+            df = df.replace([np.inf, -np.inf], None)
                 
             # Create or connect to the database
             with sqlite3.connect(db_path) as conn:

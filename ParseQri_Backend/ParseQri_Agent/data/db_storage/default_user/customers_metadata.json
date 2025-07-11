@@ -1,9 +1,0 @@
-{
-  "file": "customers_3.csv",
-  "user_id": "default_user",
-  "table_name": "customers",
-  "db_name": "customers.db",
-  "import_time": "2025-05-29 11:40:18",
-  "status": "success",
-  "output": "Current user: default_user\nPostgreSQL connection established successfully for schema retrieval\nPostgreSQL connection established successfully for query execution\nPostgreSQL connection established successfully\nUploading file: D:\\Projects\\AI_Projects\\ParseQri\\parseqri_backend\\ParseQri_Agent\\data\\input\\customers_3.csv for user: default_user\nFile exists, proceeding with upload\nUsing table name: customers\nMetadata indexer agent is available\nProcessing CSV upload for user: default_user\nCSV file D:\\Projects\\AI_Projects\\ParseQri\\parseqri_backend\\ParseQri_Agent\\data\\input\\customers_3.csv loaded successfully.\nCreating ChromaDB client at path: ../data/db_storage\\default_user\nChromaDB client created successfully\nAttempting to get collection: default_user_metadata\nSuccessfully retrieved existing collection\nSuccessfully loaded CSV with columns: ['customerID', 'companyName', 'contactName', 'contactTitle', 'address', 'city', 'region', 'postalCode', 'country', 'phone', 'fax']\nSending prompt to LLM model: llama3.1\nReceived response from LLM\nSuccessfully parsed metadata with table_name: customer_info\n\nSuccessfully uploaded data to table: customers_default_user\nYou can now query this data with:\n  python main.py \"your question about the data\" --user default_user"
-}

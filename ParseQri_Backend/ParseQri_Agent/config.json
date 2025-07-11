@@ -81,6 +81,33 @@
       "params": {}
     }
   },
+  "new_agent_system": {
+    "user_database_resolver": {
+      "api_base_url": "http://localhost:8000",
+      "timeout": 30
+    },
+    "metadata_retriever": {
+      "api_base_url": "http://localhost:8000",
+      "timeout": 30
+    },
+    "text_to_sql_generation": {
+      "model": "codellama:instruct",
+      "api_base": "http://localhost:11434",
+      "api_fallback_url": "http://localhost:8000/sql/generate/"
+    },
+    "sql_validation": {
+      "api_base_url": "http://localhost:8000",
+      "timeout": 30
+    },
+    "sql_execution": {
+      "api_base_url": "http://localhost:8000",
+      "timeout": 60
+    },
+    "response_formatter": {
+      "model": "llama3:instruct",
+      "api_base": "http://localhost:11434"
+    }
+  },
   "database": {
     "default_db_name": "",
     "default_table_name": "",
@@ -89,5 +116,11 @@
   "logging": {
     "level": "INFO",
     "file": "../data/query_logs/textsql.log"
+  },
+  "api": {
+    "base_url": "http://localhost:8000",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "retry_delay": 1
   }
 }

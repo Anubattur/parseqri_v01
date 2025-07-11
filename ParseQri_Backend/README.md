@@ -118,7 +118,7 @@ curl -X POST http://localhost:8000/api/db/config \
     "port": 5432,
     "db_name": "mydatabase",
     "db_user": "postgres",
-    "db_password": "yourpassword"
+    "db_password": "root"
   }'
 ```
 
@@ -157,7 +157,7 @@ curl -X GET http://localhost:8000/api/db/1/tables/your_table_name/metadata \
   "port": 5432,
   "db_name": "mydatabase",
   "db_user": "postgres",
-  "db_password": "yourpassword"
+  "db_password": "root"
 }
 ```
 

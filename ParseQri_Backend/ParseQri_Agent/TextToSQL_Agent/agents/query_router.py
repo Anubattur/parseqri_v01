@@ -43,7 +43,7 @@ class QueryRouterAgent:
                 data={
                     "next_steps": [
                         "metadata_indexer",  # First search for relevant metadata
-                        "postgres_handler",  # Then ensure proper user context in SQL
+                        "mysql_handler",  # Then ensure proper user context in SQL
                         "sql_generation"     # Finally generate SQL
                     ],
                     "original_query": original_query

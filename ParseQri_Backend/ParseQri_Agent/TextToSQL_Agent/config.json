@@ -11,8 +11,8 @@
       "params": {
         "llm_model": "mistral",
         "api_base": "http://localhost:11434",
-        "db_url": "postgresql://postgres:password@localhost:5432/parseqri",
-        "schema": "public",
+        "db_url": "mysql+pymysql://root:root@localhost:3306/parseqri",
+        "schema": "parseqri",
         "chroma_persist_dir": "../data/db_storage"
       }
     },
@@ -44,7 +44,7 @@
       "module": "agents.query_execution",
       "class": "QueryExecutionAgent",
       "params": {
-        "postgres_url": "postgresql://postgres:password@localhost:5432/parseqri"
+        "mysql_url": "mysql+pymysql://root:root@localhost:3306/parseqri"
       }
     },
     "response_formatting": {
@@ -94,12 +94,12 @@
         "chroma_persist_dir": "../data/db_storage"
       }
     },
-    "postgres_handler": {
-      "module": "agents.postgres_handler",
-      "class": "PostgresHandlerAgent",
+    "mysql_handler": {
+      "module": "agents.mysql_handler",
+      "class": "MySQLHandlerAgent",
       "params": {
-        "db_url": "postgresql://postgres:password@localhost:5432/parseqri",
-        "schema": "public"
+        "db_url": "mysql+pymysql://root:root@localhost:3306/parseqri",
+        "schema": "parseqri"
       }
     },
     "query_router": {

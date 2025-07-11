@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 from models.data_models import QueryContext, AgentResponse
 import importlib
+import re
 
 class TextSQLOrchestrator:
     """Main orchestrator that coordinates the agent workflow"""
@@ -76,11 +77,11 @@ class TextSQLOrchestrator:
                             print(f"Updating table name from {context.table_name} to {metadata_table}")
                             context.table_name = metadata_table
                 
-                # Then, ensure PostgreSQL user context
-                if 'postgres_handler' in next_steps and 'postgres_handler' in self.agents:
-                    postgres_response = self.agents['postgres_handler'].process(context)
-                    if not postgres_response.success:
-                        print(f"Warning: PostgreSQL handler issue: {postgres_response.message}")
+                # Then, ensure MySQL user context
+                if 'mysql_handler' in next_steps and 'mysql_handler' in self.agents:
+                    mysql_response = self.agents['mysql_handler'].process(context)
+                    if not mysql_response.success:
+                        print(f"Warning: MySQL handler issue: {mysql_response.message}")
         
         # Determine query intent
         if 'intent_classifier' in self.agents:
@@ -118,7 +119,7 @@ class TextSQLOrchestrator:
         # Initialize context for upload processing (user ID validation will be handled by individual agents)
         context = QueryContext(
             user_question="",  # No question for uploads
-            db_name="",  # Will be determined by PostgreSQL handler
+            db_name="",  # Will be determined by MySQL handler
             table_name=suggested_table_name or "",  # May be determined by metadata
             user_id=user_id
         )
@@ -152,6 +153,12 @@ class TextSQLOrchestrator:
                 if suggested_table_name is None and 'table_name' in metadata:
                     context.table_name = metadata['table_name']
                     print(f"Using table name from metadata: {context.table_name}")
+                    
+                    # Remove any numeric suffix that might be part of the table name
+                    if re.search(r'_\d+$', context.table_name):
+                        original = context.table_name
+                        context.table_name = re.sub(r'_\d+$', '', context.table_name)
+                        print(f"Removed numeric suffix from table name: {original} -> {context.table_name}")
                 
                 # Add database ID to metadata if provided
                 if db_id is not None and 'metadata' in metadata_response.data:
@@ -159,15 +166,15 @@ class TextSQLOrchestrator:
             else:
                 print(f"Warning: Metadata extraction issue: {metadata_response.message}")
         
-        # Step 3: Create PostgreSQL table and load data
-        if 'postgres_handler' in self.agents:
-            postgres_response = self.agents['postgres_handler'].process(context)
-            if not postgres_response.success:
-                return self._handle_error(context, f"PostgreSQL operation failed: {postgres_response.message}")
+        # Step 3: Create MySQL table and load data
+        if 'mysql_handler' in self.agents:
+            mysql_response = self.agents['mysql_handler'].process(context)
+            if not mysql_response.success:
+                return self._handle_error(context, f"MySQL operation failed: {mysql_response.message}")
             
-            # Update table name from PostgreSQL response if available
-            if postgres_response.data and 'table_name' in postgres_response.data:
-                context.table_name = postgres_response.data['table_name']
+            # Update table name from MySQL response if available
+            if mysql_response.data and 'table_name' in mysql_response.data:
+                context.table_name = mysql_response.data['table_name']
         
         return context
     
@@ -218,11 +225,11 @@ class TextSQLOrchestrator:
             if not context.sql_valid:
                 return self._handle_error(context, f"SQL validation failed: {context.sql_issues}")
         
-        # Apply user context with PostgreSQL handler
-        if context.user_id and 'postgres_handler' in self.agents:
-            postgres_response = self.agents['postgres_handler'].process(context)
-            if postgres_response.success and postgres_response.data.get('sql_query'):
-                context.sql_query = postgres_response.data.get('sql_query')
+        # Apply user context with MySQL handler
+        if context.user_id and 'mysql_handler' in self.agents:
+            mysql_response = self.agents['mysql_handler'].process(context)
+            if mysql_response.success and mysql_response.data.get('sql_query'):
+                context.sql_query = mysql_response.data.get('sql_query')
         
         # Execute the query
         if 'query_execution' in self.agents:
@@ -272,11 +279,11 @@ class TextSQLOrchestrator:
         
         # Check if it's a database connection error
         if "unable to open database file" in error_message.lower():
-            error_message = "Unable to connect to database. Ensure the PostgreSQL service is running and properly configured."
+            error_message = "Unable to connect to database. Ensure the MySQL service is running and properly configured."
             
             # Add remediation instructions
             print("\nRemediation steps:")
-            print("1. Check that PostgreSQL is running")
+            print("1. Check that MySQL is running")
             print("2. Verify database credentials in config.json")
             print("3. Confirm that the user has permissions to access the database")
             print("4. Ensure the table exists for the specified user")

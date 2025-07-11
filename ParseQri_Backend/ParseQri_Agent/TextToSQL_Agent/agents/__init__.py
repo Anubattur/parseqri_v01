@@ -7,6 +7,7 @@ from agents.sql_validation import SQLValidationAgent
 from agents.query_execution import QueryExecutionAgent
 from agents.response_formatting import ResponseFormattingAgent
 from agents.visualization import VisualizationAgent
+# PostgreSQL handler removed - using MySQL instead
 
 # These imports may fail if not all agents are implemented yet
 try:
@@ -26,5 +27,15 @@ except ImportError:
 
 try:
     from agents.advanced_visualization import AdvancedVisualizationAgent
+except ImportError:
+    pass
+
+try:
+    from agents.metadata_indexer import MetadataIndexerAgent
+except ImportError:
+    pass
+
+try:
+    from agents.query_router import QueryRouterAgent
 except ImportError:
     pass 

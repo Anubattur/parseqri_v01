@@ -36,11 +36,25 @@ const Login = ({ setIsAuthenticated }: LoginProps) => {
       localStorage.setItem('refresh_token', response.refresh)
       localStorage.setItem('username', username)
       
-      // Redirect to dashboard
+      // Always redirect to dashboard for existing users
       navigate('/dashboard')
     } catch (error: any) {
       console.error('Login error:', error)
-      setError(error.response?.data?.detail || error.message || 'Login failed. Please try again.')
+      
+      // Handle specific error types
+      if (error.message === 'Network Error') {
+        setError('Unable to connect to the server. Using offline mode for development.')
+        
+        // If we're in development and mock auth is enabled, proceed to dashboard
+        if (localStorage.getItem('isMockAuth') === 'true') {
+          setTimeout(() => {
+            setIsAuthenticated(true)
+            navigate('/dashboard')
+          }, 1500)
+        }
+      } else {
+        setError(error.response?.data?.detail || error.message || 'Login failed. Please try again.')
+      }
     } finally {
       setIsLoading(false)
     }

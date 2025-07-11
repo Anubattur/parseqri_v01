@@ -1,10 +1,11 @@
 from typing import Any, Dict, List, Tuple, Optional
 import pandas as pd
+import numpy as np
 import re
 from sqlalchemy import create_engine, MetaData, Table, Column, inspect
 from sqlalchemy.types import Integer, String, Float, Boolean
 from app.core.exceptions import SchemaGenerationError, DataInsertionError
-from app.db.connectors import DatabaseConnector, PostgresConnector
+from app.db.connectors import DatabaseConnectorFactory, MySQLConnector, PostgresConnector, MongoDBConnector
 from app.schemas.db import DBConfigOut
 from app.schemas.data import SchemaMetadata
 import logging
@@ -43,13 +44,24 @@ def clean_column_name(name: str) -> str:
         cleaned = 'column'
     return cleaned
 
-class PostgresSchemaManager:
+class UniversalSchemaManager:
     """
-    Manages PostgreSQL schema creation and data ingestion from CSV files.
+    Universal schema manager that works with MySQL, PostgreSQL, and MongoDB.
     """
     
-    # Mapping from pandas dtypes to PostgreSQL data types
-    PG_TYPE_MAPPING = {
+    # Mapping from pandas dtypes to SQL data types
+    MYSQL_TYPE_MAPPING = {
+        'int64': 'INT',
+        'float64': 'DOUBLE',
+        'bool': 'BOOLEAN',
+        'datetime64[ns]': 'DATETIME',
+        'timedelta64[ns]': 'TIME',
+        'object': 'TEXT',
+        'category': 'VARCHAR(255)',
+        'string': 'TEXT'
+    }
+    
+    POSTGRES_TYPE_MAPPING = {
         'int64': 'INTEGER',
         'float64': 'DOUBLE PRECISION',
         'bool': 'BOOLEAN',
@@ -60,11 +72,31 @@ class PostgresSchemaManager:
         'string': 'TEXT'
     }
     
-    def __init__(self, db_connector: PostgresConnector):
+    def __init__(self, db_connector):
         self.db_connector = db_connector
-        
-        # Cache for storing table schemas
+        self.db_type = self._detect_db_type()
         self.schema_cache = {}
+    
+    def _detect_db_type(self):
+        """Detect the database type from the connector."""
+        if isinstance(self.db_connector, MySQLConnector):
+            return 'mysql'
+        elif isinstance(self.db_connector, PostgresConnector):
+            return 'postgres'
+        elif isinstance(self.db_connector, MongoDBConnector):
+            return 'mongodb'
+        else:
+            # Default to mysql for backward compatibility
+            return 'mysql'
+    
+    def _get_type_mapping(self):
+        """Get the appropriate type mapping for the database."""
+        if self.db_type == 'mysql':
+            return self.MYSQL_TYPE_MAPPING
+        elif self.db_type == 'postgres':
+            return self.POSTGRES_TYPE_MAPPING
+        else:
+            return self.MYSQL_TYPE_MAPPING  # Default
     
     def infer_schema_from_csv(self, csv_path: str, sample_size: int = 1000) -> Dict[str, str]:
         """
@@ -75,31 +107,34 @@ class PostgresSchemaManager:
             sample_size: Number of rows to sample for type inference
             
         Returns:
-            Dictionary mapping column names to their PostgreSQL data types
+            Dictionary mapping column names to their SQL data types
         """
         try:
             # Read a sample of the CSV file
             df = pd.read_csv(csv_path, nrows=sample_size)
             
+            # Get the appropriate type mapping
+            type_mapping = self._get_type_mapping()
+            
             # Infer schema from DataFrame
             schema = {}
             for col_name, dtype in df.dtypes.items():
                 # Clean column name (remove special characters and spaces)
-                clean_col_name = re.sub(r'[^a-zA-Z0-9_]', '', col_name.lower().replace(' ', '_'))
+                clean_col_name = clean_column_name(col_name)
                 
-                # Map pandas dtype to PostgreSQL type
-                pg_type = self.PG_TYPE_MAPPING.get(str(dtype), 'TEXT')
+                # Map pandas dtype to SQL type
+                sql_type = type_mapping.get(str(dtype), 'TEXT' if self.db_type == 'postgres' else 'VARCHAR(255)')
                 
                 # Check for date/time columns
                 if 'date' in col_name.lower() or 'time' in col_name.lower():
                     # Try to convert to datetime
                     try:
                         df[col_name] = pd.to_datetime(df[col_name])
-                        pg_type = 'TIMESTAMP'
+                        sql_type = 'TIMESTAMP' if self.db_type == 'postgres' else 'DATETIME'
                     except:
                         pass
                 
-                schema[clean_col_name] = pg_type
+                schema[clean_col_name] = sql_type
             
             return schema
         except Exception as e:
@@ -108,20 +143,34 @@ class PostgresSchemaManager:
     
     def create_table_from_schema(self, table_name: str, schema: Dict[str, str]) -> None:
         """
-        Creates a new table in PostgreSQL using the provided schema.
+        Creates a new table using the provided schema.
         
         Args:
             table_name: Name of the table to create
-            schema: Dictionary mapping column names to PostgreSQL data types
+            schema: Dictionary mapping column names to SQL data types
         """
         try:
+            if self.db_type == 'mongodb':
+                # For MongoDB, we don't need to create tables explicitly
+                logger.info(f"MongoDB collection '{table_name}' will be created automatically on first insert")
+                return
+            
             # Create the table if it doesn't exist
-            column_defs = [f'"{col_name}" {data_type}' for col_name, data_type in schema.items()]
-            query = f"""
-            CREATE TABLE IF NOT EXISTS "{table_name}" (
-                {', '.join(column_defs)}
-            );
-            """
+            if self.db_type == 'mysql':
+                column_defs = [f"`{col_name}` {data_type}" for col_name, data_type in schema.items()]
+                query = f"""
+                CREATE TABLE IF NOT EXISTS `{table_name}` (
+                    {', '.join(column_defs)}
+                );
+                """
+            else:  # PostgreSQL
+                column_defs = [f'"{col_name}" {data_type}' for col_name, data_type in schema.items()]
+                query = f"""
+                CREATE TABLE IF NOT EXISTS "{table_name}" (
+                    {', '.join(column_defs)}
+                );
+                """
+            
             self.db_connector.execute_query(query)
             
             # Cache the schema for this table
@@ -136,7 +185,7 @@ class PostgresSchemaManager:
                            create_if_not_exists: bool = True,
                            batch_size: int = 1000) -> int:
         """
-        Loads data from a CSV file into a PostgreSQL table.
+        Loads data from a CSV file into a table.
         
         Args:
             table_name: Name of the target table
@@ -157,14 +206,27 @@ class PostgresSchemaManager:
             total_rows = 0
             for chunk in pd.read_csv(csv_path, chunksize=batch_size):
                 # Clean column names
-                chunk.columns = [re.sub(r'[^a-zA-Z0-9_]', '', col.lower().replace(' ', '_')) for col in chunk.columns]
+                chunk.columns = [clean_column_name(col) for col in chunk.columns]
+                
+                # Handle NaN values - replace with None for MySQL compatibility
+                chunk = chunk.replace({np.nan: None})
+                
+                # Also handle inf and -inf values
+                chunk = chunk.replace([np.inf, -np.inf], None)
                 
                 # Convert to list of dictionaries
                 records = chunk.to_dict('records')
                 
                 # Insert data
                 if records:
-                    self.db_connector.insert_data(table_name, records)
+                    if self.db_type == 'mongodb':
+                        # For MongoDB, use collection insert
+                        collection = self.db_connector.database[table_name]
+                        collection.insert_many(records)
+                    else:
+                        # For SQL databases
+                        self.db_connector.insert_data(table_name, records)
+                    
                     total_rows += len(records)
                     logger.info(f"Inserted {len(records)} rows into table '{table_name}'")
             
@@ -187,7 +249,10 @@ class PostgresSchemaManager:
         try:
             # Try to get column info using the connector
             try:
-                column_info = self.db_connector.get_table_schema(table_name)
+                if self.db_type == 'mongodb':
+                    column_info = self.db_connector.get_collection_schema(table_name)
+                else:
+                    column_info = self.db_connector.get_table_schema(table_name)
             except Exception as e:
                 logger.error(f"Error getting column info from database: {e}")
                 
@@ -236,7 +301,10 @@ class PostgresSchemaManager:
             Dictionary with database metadata
         """
         try:
-            tables = self.db_connector.list_tables()
+            if self.db_type == 'mongodb':
+                tables = self.db_connector.list_collections()
+            else:
+                tables = self.db_connector.list_tables()
             
             metadata = {
                 "tables": {}
@@ -286,15 +354,65 @@ class PostgresSchemaManager:
     
     def get_schema_metadata(self, table_name: str) -> Dict[str, Any]:
         """
-        Alias for get_table_metadata to maintain compatibility with the API routes.
+        Gets metadata for a specific table schema
         
         Args:
             table_name: Name of the table
             
         Returns:
-            Dictionary with table metadata
+            Dictionary containing table metadata
         """
-        return self.get_table_metadata(table_name)
+        try:
+            return self.get_table_metadata(table_name)
+        except Exception as e:
+            logger.error(f"Error getting schema metadata for table {table_name}: {e}")
+            return {}
+
+    def get_all_tables(self) -> List[str]:
+        """
+        Get all table names in the database
+        
+        Returns:
+            List of table names
+        """
+        try:
+            if self.db_type == 'mongodb':
+                # For MongoDB, get all collection names
+                query = "db.listCollections()"  # This would need to be handled by the connector
+                result = self.db_connector.execute_query(query)
+                return [doc['name'] for doc in result]
+            else:
+                # For SQL databases
+                if self.db_type == 'mysql':
+                    query = "SHOW TABLES"
+                elif self.db_type == 'postgres':
+                    query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+                else:
+                    query = "SHOW TABLES"  # Default to MySQL syntax
+                
+                result = self.db_connector.execute_query(query)
+                
+                if isinstance(result, list) and result:
+                    # Handle different result formats
+                    if isinstance(result[0], tuple):
+                        return [row[0] for row in result]
+                    elif isinstance(result[0], dict):
+                        # For MySQL, the column might be named differently
+                        if self.db_type == 'mysql':
+                            # MySQL SHOW TABLES returns results with a dynamic column name
+                            first_key = list(result[0].keys())[0]
+                            return [row[first_key] for row in result]
+                        else:
+                            return [row['table_name'] for row in result]
+                    else:
+                        return [str(row) for row in result]
+                else:
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"Error getting all tables: {e}")
+            return []
 
 # For backwards compatibility
-SchemaManager = PostgresSchemaManager
+SchemaManager = UniversalSchemaManager
+PostgresSchemaManager = UniversalSchemaManager
