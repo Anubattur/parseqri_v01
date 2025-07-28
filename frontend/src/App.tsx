@@ -11,6 +11,7 @@ import Register from './pages/Register'
 import DataSourceSelection from './pages/DataSourceSelection'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginTest from './components/LoginTest'
+import MarkdownTestResponse from './components/MarkdownTestResponse'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
@@ -27,6 +28,7 @@ function App() {
       <Route path="/login" element={<Login setIsAuthenticated={setIsAuthenticated} />} />
       <Route path="/register" element={<Register setIsAuthenticated={setIsAuthenticated} />} />
       <Route path="/login-test" element={<LoginTest />} />
+      <Route path="/markdown-test" element={<MarkdownTestResponse />} />
       
       {/* Data Source Selection - Protected Route */}
       <Route 

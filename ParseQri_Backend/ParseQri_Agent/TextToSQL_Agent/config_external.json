@@ -11,8 +11,8 @@
       "params": {
         "llm_model": "mistral",
         "api_base": "http://localhost:11434",
-        "db_url": "mysql+pymysql://root:root@localhost:3306/world",
-        "schema": "world",
+        "db_url": "mysql+pymysql://root:root@localhost:3306/sakila",
+        "schema": "sakila",
         "chroma_persist_dir": "../data/db_storage"
       }
     },
@@ -44,7 +44,7 @@
       "module": "agents.query_execution",
       "class": "QueryExecutionAgent",
       "params": {
-        "mysql_url": "mysql+pymysql://root:root@localhost:3306/world"
+        "mysql_url": "mysql+pymysql://root:root@localhost:3306/sakila"
       }
     },
     "response_formatting": {
@@ -98,8 +98,8 @@
       "module": "agents.mysql_handler",
       "class": "MySQLHandlerAgent",
       "params": {
-        "db_url": "mysql+pymysql://root:root@localhost:3306/world",
-        "schema": "world"
+        "db_url": "mysql+pymysql://root:root@localhost:3306/sakila",
+        "schema": "sakila"
       }
     },
     "query_router": {
@@ -109,7 +109,7 @@
     }
   },
   "database": {
-    "default_db_name": "world",
+    "default_db_name": "sakila",
     "default_table_name": ""
   },
   "logging": {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { RiMoonLine, RiSunLine, RiUserLine } from 'react-icons/ri'
+import { motion } from 'framer-motion'
 
 const Header = () => {
   const [darkMode, setDarkMode] = useState(false)
@@ -58,6 +59,21 @@ const Header = () => {
               </div>
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{username}</span>
             </div>
+            {/* C2C Advanced Systems Logo */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="flex items-center"
+            >
+              <motion.img 
+                src={darkMode ? "/c2c_logo_dark.png" : "/c2c_logo_light.png"}
+                alt="C2C Advanced Systems" 
+                className="h-12 w-auto"
+                whileHover={{ scale: 1.05 }}
+                transition={{ duration: 0.2 }}
+              />
+            </motion.div>
           </div>
         </div>
       </div>

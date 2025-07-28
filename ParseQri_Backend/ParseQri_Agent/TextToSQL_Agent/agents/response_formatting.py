@@ -61,17 +61,22 @@ class ResponseFormattingAgent:
         results_str = results.to_json(orient='records', indent=2)
         
         prompt = (
-            "You are an expert data analyst. Format the following query results into a natural language response.\n\n"
+            "You are an expert data analyst. Format the following query results into a natural language response using Markdown formatting.\n\n"
             f"User Question: {user_query}\n\n"
             f"Query Results:\n{results_str}\n\n"
             "Instructions:\n"
-            "- Provide a clear, concise natural language response\n"
+            "- Provide a clear, concise natural language response using Markdown formatting\n"
+            "- Use **bold** for emphasis on key numbers and important findings\n"
+            "- Use bullet points (-) or numbered lists (1.) when presenting multiple items\n"
+            "- Use tables (| Column | Value |) when appropriate for structured data\n"
             "- Include specific numbers and values from the results\n"
             "- Format numbers appropriately (e.g., currency with 2 decimal places)\n"
             "- Make the response easy to understand for non-technical users\n"
             "- Do not include SQL syntax or technical jargon\n"
-            "- Start with a direct answer to the question\n\n"
-            "Format your response in a clear, professional manner."
+            "- Start with a direct answer to the question\n"
+            "- Use headers (## or ###) to organize longer responses\n"
+            "- Use `inline code` for specific values or terms when helpful\n\n"
+            "Format your response using proper Markdown syntax for better readability."
         )
 
         try:

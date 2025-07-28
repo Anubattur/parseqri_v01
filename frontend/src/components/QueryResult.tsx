@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { 
   RiCodeSSlashLine, 
   RiMessage2Line, 
@@ -11,7 +13,11 @@ import {
   RiFullscreenExitLine,
   RiShareLine,
   RiQuestionLine,
-  RiDeleteBinLine
+  RiDeleteBinLine,
+  RiThumbUpLine,
+  RiThumbUpFill,
+  RiThumbDownLine,
+  RiThumbDownFill
 } from 'react-icons/ri'
 import {
   Chart as ChartJS,
@@ -39,7 +45,7 @@ ChartJS.register(
   ChartLegend
 )
 
-const COLORS = ['#1e70f2', '#0ca6eb', '#58b0ff', '#bce0ff', '#0369a0', '#075784', '#0c496c']
+const COLORS = ['#010080', '#000066', '#00004d', '#000033', '#0000ff', '#3333ff', '#6666ff']
 
 interface QueryResultProps {
   answer: string;
@@ -48,6 +54,8 @@ interface QueryResultProps {
   chartType?: 'bar' | 'line' | 'pie';
   question?: string;
   onDelete?: () => void;
+  onLike?: () => void;
+  onDislike?: () => void;
 }
 
 const QueryResult = ({ 
@@ -56,11 +64,15 @@ const QueryResult = ({
   data,
   chartType = 'bar',
   question = '',
-  onDelete
+  onDelete,
+  onLike,
+  onDislike
 }: QueryResultProps) => {
   const [activeTab, setActiveTab] = useState<'answer' | 'sql' | 'viz'>('answer')
   const [fullscreen, setFullscreen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [liked, setLiked] = useState(false)
+  const [disliked, setDisliked] = useState(false)
 
   // Use the question prop if available, otherwise try to extract it from the answer
   const extractedQuestion = (() => {
@@ -89,8 +101,8 @@ const QueryResult = ({
         {
           label: 'Value',
           data: data.map(item => item.value),
-          backgroundColor: chartType === 'pie' ? COLORS : '#1e70f2',
-          borderColor: chartType === 'pie' ? COLORS.map(color => color + '88') : '#1e70f2',
+          backgroundColor: chartType === 'pie' ? COLORS : '#010080',
+          borderColor: chartType === 'pie' ? COLORS.map(color => color + '88') : '#010080',
           borderWidth: 1,
         }
       ]
@@ -171,6 +183,26 @@ const QueryResult = ({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  const handleLike = () => {
+    if (disliked) {
+      setDisliked(false)
+    }
+    setLiked(!liked)
+    if (onLike) {
+      onLike()
+    }
+  }
+
+  const handleDislike = () => {
+    if (liked) {
+      setLiked(false)
+    }
+    setDisliked(!disliked)
+    if (onDislike) {
+      onDislike()
+    }
   }
 
   return (
@@ -277,7 +309,7 @@ const QueryResult = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
-              className="prose dark:prose-invert max-w-none"
+              className="prose dark:prose-invert max-w-none relative"
             >
               {extractedQuestion && (
                 <div className="mb-4">
@@ -290,7 +322,150 @@ const QueryResult = ({
                   <div className="h-0.5 bg-gray-100 dark:bg-dark-700 w-full my-3"></div>
                 </div>
               )}
-              <p className="text-gray-800 dark:text-gray-200">{answer}</p>
+              <div className="prose prose-gray dark:prose-invert max-w-none prose-headings:text-gray-900 dark:prose-headings:text-white prose-p:text-gray-800 dark:prose-p:text-gray-200 prose-strong:text-gray-900 dark:prose-strong:text-white prose-code:text-primary-600 dark:prose-code:text-primary-400 prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-100 dark:prose-pre:bg-gray-800 prose-blockquote:border-primary-500 prose-blockquote:text-gray-700 dark:prose-blockquote:text-gray-300 pb-12">
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code: ({ node, inline, className, children, ...props }: any) => {
+                      const match = /language-(\w+)/.exec(className || '')
+                      return !inline && match ? (
+                        <SyntaxHighlighter
+                          style={vscDarkPlus as any}
+                          language={match[1]}
+                          PreTag="div"
+                          className="rounded-lg text-sm"
+                        >
+                          {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
+                      ) : (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      )
+                    },
+                    h1: ({ children }: any) => (
+                      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4 mt-6">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }: any) => (
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3 mt-5">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }: any) => (
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2 mt-4">
+                        {children}
+                      </h3>
+                    ),
+                    p: ({ children }: any) => (
+                      <p className="text-gray-800 dark:text-gray-200 mb-3 leading-relaxed">
+                        {children}
+                      </p>
+                    ),
+                    ul: ({ children }: any) => (
+                      <ul className="list-disc pl-6 mb-3 text-gray-800 dark:text-gray-200 space-y-1">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({ children }: any) => (
+                      <ol className="list-decimal pl-6 mb-3 text-gray-800 dark:text-gray-200 space-y-1">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({ children }: any) => (
+                      <li className="text-gray-800 dark:text-gray-200">
+                        {children}
+                      </li>
+                    ),
+                    blockquote: ({ children }: any) => (
+                      <blockquote className="border-l-4 border-primary-500 pl-4 py-2 mb-3 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 italic">
+                        {children}
+                      </blockquote>
+                    ),
+                    table: ({ children }: any) => (
+                      <div className="overflow-x-auto mb-4">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                          {children}
+                        </table>
+                      </div>
+                    ),
+                    thead: ({ children }: any) => (
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        {children}
+                      </thead>
+                    ),
+                    tbody: ({ children }: any) => (
+                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                        {children}
+                      </tbody>
+                    ),
+                    th: ({ children }: any) => (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }: any) => (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">
+                        {children}
+                      </td>
+                    ),
+                    strong: ({ children }: any) => (
+                      <strong className="font-semibold text-gray-900 dark:text-white">
+                        {children}
+                      </strong>
+                    ),
+                    em: ({ children }: any) => (
+                      <em className="italic text-gray-800 dark:text-gray-200">
+                        {children}
+                      </em>
+                    ),
+                    a: ({ children, href }: any) => (
+                      <a 
+                        href={href} 
+                        className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 underline transition-colors"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {children}
+                      </a>
+                    )
+                  }}
+                >
+                  {answer}
+                </ReactMarkdown>
+              </div>
+              
+              {/* Like/Dislike buttons */}
+              <div className="absolute bottom-2 right-2 flex items-center space-x-2">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleLike}
+                  className={`p-2 rounded-full transition-colors ${
+                    liked 
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' 
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-400'
+                  }`}
+                  title="Like this response"
+                >
+                  {liked ? <RiThumbUpFill size={16} /> : <RiThumbUpLine size={16} />}
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleDislike}
+                  className={`p-2 rounded-full transition-colors ${
+                    disliked 
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' 
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400'
+                  }`}
+                  title="Dislike this response"
+                >
+                  {disliked ? <RiThumbDownFill size={16} /> : <RiThumbDownLine size={16} />}
+                </motion.button>
+              </div>
             </motion.div>
           )}
           {activeTab === 'sql' && (

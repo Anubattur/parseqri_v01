@@ -185,7 +185,7 @@ const DataSourceSelection: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
       <div className="max-w-4xl w-full">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Choose Your Data Source</h1>
@@ -197,13 +197,13 @@ const DataSourceSelection: React.FC = () => {
             {/* File Upload Option */}
             <div 
               className={`bg-white rounded-xl shadow-lg p-8 cursor-pointer transition-all duration-300 hover:shadow-xl border-2 ${
-                selectedOption === 'file' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                selectedOption === 'file' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-primary-300'
               }`}
               onClick={() => handleOptionSelect('file')}
             >
               <div className="text-center">
-                <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                  <Upload className="w-8 h-8 text-blue-600" />
+                <div className="mx-auto w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mb-4">
+                  <Upload className="w-8 h-8 text-primary-600" />
                 </div>
                 <h3 className="text-2xl font-semibold text-gray-900 mb-4">Upload Files</h3>
                 <p className="text-gray-600 mb-6">
@@ -282,7 +282,7 @@ const DataSourceSelection: React.FC = () => {
                     const defaultPorts = { mysql: 3306, postgres: 5432, mongodb: 27017 }
                     handleDatabaseConfigChange('port', defaultPorts[newType])
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="mysql">MySQL</option>
                   <option value="postgres">PostgreSQL</option>
@@ -301,7 +301,7 @@ const DataSourceSelection: React.FC = () => {
                     value={databaseConfig.host}
                     onChange={(e) => handleDatabaseConfigChange('host', e.target.value)}
                     placeholder="localhost"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -313,7 +313,7 @@ const DataSourceSelection: React.FC = () => {
                     value={databaseConfig.port}
                     onChange={(e) => handleDatabaseConfigChange('port', parseInt(e.target.value))}
                     placeholder={getPortPlaceholder()}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -328,7 +328,7 @@ const DataSourceSelection: React.FC = () => {
                   value={databaseConfig.db_name}
                   onChange={(e) => handleDatabaseConfigChange('db_name', e.target.value)}
                   placeholder="your_database_name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -343,7 +343,7 @@ const DataSourceSelection: React.FC = () => {
                     value={databaseConfig.db_user}
                     onChange={(e) => handleDatabaseConfigChange('db_user', e.target.value)}
                     placeholder="username"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -355,7 +355,7 @@ const DataSourceSelection: React.FC = () => {
                     value={databaseConfig.db_password}
                     onChange={(e) => handleDatabaseConfigChange('db_password', e.target.value)}
                     placeholder="password"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -381,7 +381,7 @@ const DataSourceSelection: React.FC = () => {
                 <button
                   onClick={testConnection}
                   disabled={isConnecting}
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  className="flex-1 bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
                   {isConnecting ? (
                     <>

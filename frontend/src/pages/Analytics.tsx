@@ -28,7 +28,7 @@ ChartJS.register(
   ChartLegend
 )
 
-const COLORS = ['#1e70f2', '#0ca6eb', '#58b0ff', '#bce0ff', '#0369a0', '#075784', '#0c496c']
+const COLORS = ['#010080', '#000066', '#00004d', '#000033', '#0000ff', '#3333ff', '#6666ff']
 
 const Analytics = () => {
   const [dateRange, setDateRange] = useState('month')
@@ -79,8 +79,8 @@ const Analytics = () => {
       {
         label: 'Revenue',
         data: revenueData.map(item => item.value),
-        borderColor: '#1e70f2',
-        backgroundColor: 'rgba(30, 112, 242, 0.1)',
+        borderColor: '#010080',
+                  backgroundColor: 'rgba(1, 0, 128, 0.1)',
         tension: 0.4,
       }
     ]
@@ -136,7 +136,7 @@ const Analytics = () => {
       {
         label: 'Sales',
         data: topProductsData.map(item => item.value),
-        backgroundColor: '#1e70f2',
+                  backgroundColor: '#010080',
       }
     ]
   }

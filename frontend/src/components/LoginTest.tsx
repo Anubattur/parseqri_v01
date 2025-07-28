@@ -66,7 +66,7 @@ const LoginTest: React.FC = () => {
       <button
         onClick={handleLogin}
         disabled={isLoading}
-        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+        className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded"
       >
         {isLoading ? 'Loading...' : 'Test Login'}
       </button>

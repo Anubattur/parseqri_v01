@@ -391,7 +391,7 @@ const Dashboard = () => {
                     >
                       <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent Queries</h3>
                       <div className="space-y-2">
-                        {recentQueries.map((query, index) => (
+                        {recentQueries.slice(0, 3).map((query, index) => (
                           <motion.button
                             key={index}
                             initial={{ opacity: 0, x: -10 }}
@@ -408,6 +408,42 @@ const Dashboard = () => {
                             />
                           </motion.button>
                         ))}
+                        {recentQueries.length > 3 && (
+                          <details className="group">
+                            <summary className="cursor-pointer px-3 py-2 text-sm text-primary-600 dark:text-primary-400 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg transition-colors list-none">
+                              <span className="flex items-center">
+                                Show {recentQueries.length - 3} more queries
+                                <svg 
+                                  className="w-4 h-4 ml-1 transform transition-transform group-open:rotate-180" 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </span>
+                            </summary>
+                            <div className="mt-2 space-y-2">
+                              {recentQueries.slice(3).map((query, index) => (
+                                <motion.button
+                                  key={index + 3}
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ duration: 0.3, delay: index * 0.1 }}
+                                  onClick={() => handleSubmitQuery(query)}
+                                  className="block w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg transition-colors relative group"
+                                >
+                                  {query}
+                                  <RiDeleteBinLine 
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    size={16}
+                                    onClick={(e) => handleDeleteQuery(e, index + 3)}
+                                  />
+                                </motion.button>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                       </div>
                     </motion.div>
                   )}
@@ -429,6 +465,8 @@ const Dashboard = () => {
                           chartType={result.chartType}
                           question={result.question}
                           onDelete={() => handleDeleteResult(result.timestamp)}
+                          onLike={() => console.log('Liked response:', result.question)}
+                          onDislike={() => console.log('Disliked response:', result.question)}
                         />
                       </motion.div>
                     ))}

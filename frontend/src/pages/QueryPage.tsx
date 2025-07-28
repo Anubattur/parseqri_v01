@@ -74,6 +74,8 @@ const QueryPage = () => {
           data={queryResult.data}
           chartType={queryResult.chartType}
           question={queryResult.question}
+          onLike={() => console.log('Liked response:', queryResult.question)}
+          onDislike={() => console.log('Disliked response:', queryResult.question)}
         />
       )}
     </div>
